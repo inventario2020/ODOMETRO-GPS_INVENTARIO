@@ -36,6 +36,13 @@
   .status.ok { color: var(--accent); border-color: var(--accent-dim); }
   .status.err { color: var(--warn); border-color: var(--warn); }
 
+  .info-bar {
+    display: flex; justify-content: center; gap: 22px;
+    font-size: 13px; color: var(--text-dim); margin-bottom: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .info-bar span { cursor: pointer; }
+
   .card {
     background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
     padding: 16px; margin-bottom: 12px;
@@ -96,6 +103,10 @@
 <div class="app">
   <h1>Odómetro GPS</h1>
   <div id="status" class="status">Esperando señal GPS…</div>
+  <div class="info-bar">
+    <span id="compassInfo">🧭 --°</span>
+    <span id="tempInfo">🌡️ -- °C</span>
+  </div>
   <button class="btn-secondary" id="wakeLockBtn" style="margin-bottom:12px;">🔆 Mantener pantalla encendida: OFF</button>
 
   <div class="card speed-card">
@@ -188,6 +199,11 @@
   const MIN_ACCURACY_FOR_DISTANCE = 30; // metros; por encima de esto no sumamos a la distancia
   const MIN_MOVEMENT_M = 5; // umbral mínimo de desplazamiento real; por debajo se considera ruido del GPS en parado
 
+  // ---------- Temperatura (requiere internet, a diferencia del resto de la app) ----------
+  let lastTempFetchTime = 0;
+  const TEMP_FETCH_INTERVAL_MS = 10 * 60 * 1000; // no consultar más de una vez cada 10 min
+  let compassStarted = false;
+
   // ---------- Podómetro (acelerómetro): distancia metro a metro sin depender del GPS ----------
   let pedoActive = false;
   let pedoSteps = 0;
@@ -279,6 +295,57 @@
     el.pedoBadge.textContent = "inactivo";
     el.pedoBadge.classList.remove("live-purple");
     saveTrip();
+  }
+
+  // ---------- Brújula ----------
+  const COMPASS_DIRS = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
+
+  function handleOrientation(event) {
+    let heading = null;
+    if (typeof event.webkitCompassHeading === "number") {
+      heading = event.webkitCompassHeading; // iOS: ya es rumbo verdadero, sentido horario
+    } else if (event.alpha != null) {
+      heading = 360 - event.alpha; // Android/otros: alpha aumenta antihorario
+    }
+    if (heading == null || isNaN(heading)) return;
+    heading = ((heading % 360) + 360) % 360;
+
+    const dirIndex = Math.round(heading / 45) % 8;
+    el.compassInfo.textContent = "🧭 " + Math.round(heading) + "° " + COMPASS_DIRS[dirIndex];
+  }
+
+  async function startCompass() {
+    if (compassStarted) return;
+    if (typeof DeviceOrientationEvent !== "undefined" &&
+        typeof DeviceOrientationEvent.requestPermission === "function") {
+      // iOS: requiere permiso explícito disparado por un toque del usuario
+      try {
+        const perm = await DeviceOrientationEvent.requestPermission();
+        if (perm !== "granted") return;
+      } catch (err) {
+        return;
+      }
+    }
+    if ("ondeviceorientationabsolute" in window) {
+      window.addEventListener("deviceorientationabsolute", handleOrientation);
+    } else {
+      window.addEventListener("deviceorientation", handleOrientation);
+    }
+    compassStarted = true;
+  }
+
+  // ---------- Temperatura (Open-Meteo, requiere internet) ----------
+  function fetchTemperature(lat, lon) {
+    fetch("https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon + "&current_weather=true")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data.current_weather && typeof data.current_weather.temperature === "number") {
+          el.tempInfo.textContent = "🌡️ " + Math.round(data.current_weather.temperature) + "°C";
+        }
+      })
+      .catch(function () {
+        el.tempInfo.textContent = "🌡️ sin conexión";
+      });
   }
 
   // ---------- Wake Lock (pantalla encendida) ----------
@@ -489,7 +556,9 @@
     pedoDistance: document.getElementById("pedoDistance"),
     pedoToggleBtn: document.getElementById("pedoToggleBtn"),
     pedoResetBtn: document.getElementById("pedoResetBtn"),
-    pedoBadge: document.getElementById("pedoBadge")
+    pedoBadge: document.getElementById("pedoBadge"),
+    compassInfo: document.getElementById("compassInfo"),
+    tempInfo: document.getElementById("tempInfo")
   };
 
   function setStatus(msg, type) {
@@ -563,6 +632,12 @@
     lastPos = { lat: latitude, lon: longitude, t: now };
     setStatus("Señal GPS activa", "ok");
     scheduleSave();
+
+    // Temperatura: solo se consulta cada cierto tiempo para no abusar del servicio online
+    if (now - lastTempFetchTime > TEMP_FETCH_INTERVAL_MS) {
+      lastTempFetchTime = now;
+      fetchTemperature(latitude, longitude);
+    }
   }
 
   function updateCountdownUI(walked, remaining) {
@@ -689,9 +764,21 @@
     saveTrip();
   });
 
+  // Toca el icono de la brújula para conceder permiso en iOS; en Android/otros
+  // arranca sola sin necesidad de tocar nada.
+  el.compassInfo.addEventListener("click", startCompass);
+
   // ---------- Arranque ----------
   loadTrip();
   startWatch();
+  // Intento silencioso de arrancar la brújula (funciona directo en Android;
+  // en iOS no hará nada hasta que el usuario toque el icono, por el permiso)
+  if (!(typeof DeviceOrientationEvent !== "undefined" &&
+        typeof DeviceOrientationEvent.requestPermission === "function")) {
+    startCompass();
+  } else {
+    el.compassInfo.textContent = "🧭 toca para activar";
+  }
 })();
 </script>
 </body>
