@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Odómetro GPS</title>
+<style>
+  :root{
+    --bg: #0B0F14;
+    --panel: #131A22;
+    --panel-border: #223140;
+    --text: #E7EEF3;
+    --text-dim: #7C8B99;
+    --accent: #35D0C0;
+    --accent-dim: #1E7A70;
+    --warn: #F2B640;
+    --danger: #E5484D;
+    --mono: ui-monospace, "SF Mono", "IBM Plex Mono", "Cascadia Code", monospace;
+    --sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body{
+    margin:0; padding:0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overscroll-behavior-y: contain;
+  }
+  body{
+    display:flex;
+    justify-content:center;
+  }
+  .app{
+    width:100%;
+    max-width: 480px;
+    padding: 20px 16px 32px;
+    min-height:100vh;
+  }
+
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding: 4px 4px 20px;
+  }
+  header h1{
+    font-size: 15px;
+    font-weight: 600;
+    margin:0;
+    letter-spacing: 0.2px;
+  }
+  .status{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .dot{
+    width:8px; height:8px; border-radius:50%;
+    background: var(--text-dim);
+    flex-shrink:0;
+  }
+  .dot.live{
+    background: var(--accent);
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%,100%{ box-shadow: 0 0 0 0 rgba(53,208,192,0.55); }
+    50%{ box-shadow: 0 0 0 6px rgba(53,208,192,0); }
+  }
+
+  .speed-panel{
+    background: linear-gradient(180deg, var(--panel), #0F151C);
+    border: 1px solid var(--panel-border);
+    border-radius: 18px;
+    padding: 28px 20px 22px;
+    text-align:center;
+    margin-bottom: 14px;
+  }
+  .speed-value{
+    font-family: var(--mono);
+    font-size: 64px;
+    font-weight: 600;
+    line-height:1;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .speed-unit{
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .accuracy-line{
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .card{
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    padding: 14px 16px;
+  }
+  .card.full{ grid-column: 1 / -1; }
+  .card .label{
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .card .value{
+    font-family: var(--mono);
+    font-size: 20px;
+    font-variant-numeric: tabular-nums;
+    word-break: break-all;
+  }
+  .card .value small{
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: var(--sans);
+    margin-left: 4px;
+  }
+
+  .distance-value{
+    font-size: 26px;
+  }
+
+  .controls{
+    display:flex;
+    gap:10px;
+    margin: 16px 0 22px;
+  }
+  button{
+    font-family: var(--sans);
+    border: none;
+    border-radius: 14px;
+    padding: 16px 14px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.08s ease, opacity 0.15s ease;
+  }
+  button:active{ transform: scale(0.97); }
+  .btn-main{
+    flex: 2;
+    background: var(--accent);
+    color: #06201C;
+  }
+  .btn-main.active{
+    background: var(--danger);
+    color: #2B0708;
+  }
+  .btn-secondary{
+    flex: 1;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--panel-border);
+  }
+
+  .section-title{
+    font-size: 13px;
+    color: var(--text-dim);
+    margin: 6px 4px 10px;
+  }
+
+  .remaining-panel{
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 18px;
+    padding: 18px;
+  }
+  .remaining-input-row{
+    display:flex;
+    gap:10px;
+    margin-bottom: 14px;
+  }
+  .remaining-input-row input{
+    flex:1;
+    min-width:0;
+    background: var(--bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 14px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 17px;
+  }
+  .remaining-input-row input:focus{
+    outline: none;
+    border-color: var(--accent);
+  }
+  .remaining-input-row input::placeholder{ color: var(--text-dim); }
+
+  .remaining-display{
+    text-align:center;
+    padding: 16px 0 6px;
+  }
+  .remaining-display .value{
+    font-family: var(--mono);
+    font-size: 46px;
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  .remaining-display .value.warn{ color: var(--warn); }
+  .remaining-display .value.arrived{ color: var(--accent); }
+  .remaining-display .unit{
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+  .remaining-display .arrived-msg{
+    font-size: 14px;
+    color: var(--accent);
+    margin-top: 8px;
+    font-weight: 600;
+  }
+
+  .progress-track{
+    height: 8px;
+    border-radius: 4px;
+    background: var(--bg);
+    border: 1px solid var(--panel-border);
+    overflow:hidden;
+    margin-top: 10px;
+  }
+  .progress-fill{
+    height:100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+
+  .remaining-controls{
+    display:flex;
+    gap:10px;
+    margin-top: 14px;
+  }
+
+  .error-banner{
+    background: #2A1416;
+    border: 1px solid #4A2226;
+    color: #F3B7BA;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 13px;
+    margin-bottom: 14px;
+    display:none;
+  }
+  .error-banner.show{ display:block; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <h1>Odómetro GPS</h1>
+    <div class="status">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">Detenido</span>
+    </div>
+  </header>
+
+  <div class="error-banner" id="errorBanner"></div>
+
+  <div class="speed-panel">
+    <div class="speed-value" id="speedValue">0.0</div>
+    <div class="speed-unit">km/h</div>
+    <div class="accuracy-line" id="accuracyLine">Precisión: —</div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">Zona UTM</div>
+      <div class="value" id="utmZone">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Distancia total</div>
+      <div class="value distance-value" id="totalDistance">0<small>m</small></div>
+    </div>
+    <div class="card full">
+      <div class="label">Este (Easting)</div>
+      <div class="value" id="utmEasting">—</div>
+    </div>
+    <div class="card full">
+      <div class="label">Norte (Northing)</div>
+      <div class="value" id="utmNorthing">—</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn-main" id="trackBtn">Iniciar seguimiento</button>
+    <button class="btn-secondary" id="resetBtn">Reiniciar</button>
+  </div>
+
+  <div class="section-title">Distancia restante</div>
+  <div class="remaining-panel">
+    <div class="remaining-input-row">
+      <input type="number" id="remainingInput" placeholder="Distancia inicial en metros" inputmode="numeric" min="0">
+    </div>
+
+    <div class="remaining-display">
+      <div class="value" id="remainingValue">—</div>
+      <div class="unit">metros restantes</div>
+      <div class="arrived-msg" id="arrivedMsg" style="display:none;">Has llegado al destino</div>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+
+    <div class="remaining-controls">
+      <button class="btn-main" id="remainingBtn">Iniciar cuenta atrás</button>
+      <button class="btn-secondary" id="remainingResetBtn">Borrar</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- Estado ----------
+  let watchId = null;
+  let tracking = false;
+  let lastPosition = null;   // { lat, lon, time }
+  let totalDistanceM = 0;
+
+  let remainingActive = false;
+  let remainingInitialM = 0;
+  let remainingLeftM = 0;
+
+  // ---------- Elementos ----------
+  const speedValue = document.getElementById('speedValue');
+  const accuracyLine = document.getElementById('accuracyLine');
+  const utmZone = document.getElementById('utmZone');
+  const utmEasting = document.getElementById('utmEasting');
+  const utmNorthing = document.getElementById('utmNorthing');
+  const totalDistanceEl = document.getElementById('totalDistance');
+  const trackBtn = document.getElementById('trackBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  const errorBanner = document.getElementById('errorBanner');
+
+  const remainingInput = document.getElementById('remainingInput');
+  const remainingBtn = document.getElementById('remainingBtn');
+  const remainingResetBtn = document.getElementById('remainingResetBtn');
+  const remainingValue = document.getElementById('remainingValue');
+  const arrivedMsg = document.getElementById('arrivedMsg');
+  const progressFill = document.getElementById('progressFill');
+
+  // ---------- Utilidades ----------
+
+  function showError(msg){
+    errorBanner.textContent = msg;
+    errorBanner.classList.add('show');
+  }
+  function clearError(){
+    errorBanner.classList.remove('show');
+  }
+
+  // Distancia Haversine en metros
+  function haversine(lat1, lon1, lat2, lon2){
+    const R = 6371000;
+    const toRad = d => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+
+  // Conversión lat/lon (WGS84) a UTM
+  function toUTM(lat, lon){
+    const a = 6378137.0;
+    const eccSq = 0.00669438;
+    const k0 = 0.9996;
+
+    const latRad = lat * Math.PI / 180;
+    const lonRad = lon * Math.PI / 180;
+
+    let zoneNumber = Math.floor((lon + 180) / 6) + 1;
+    // Excepciones de Noruega/Svalbard
+    if (lat >= 56 && lat < 64 && lon >= 3 && lon < 12) zoneNumber = 32;
+    if (lat >= 72 && lat < 84){
+      if (lon >= 0 && lon < 9) zoneNumber = 31;
+      else if (lon >= 9 && lon < 21) zoneNumber = 33;
+      else if (lon >= 21 && lon < 33) zoneNumber = 35;
+      else if (lon >= 33 && lon < 42) zoneNumber = 37;
+    }
+
+    const lonOrigin = (zoneNumber - 1) * 6 - 180 + 3;
+    const lonOriginRad = lonOrigin * Math.PI / 180;
+    const eccPrimeSq = eccSq / (1 - eccSq);
+
+    const N = a / Math.sqrt(1 - eccSq * Math.sin(latRad) ** 2);
+    const T = Math.tan(latRad) ** 2;
+    const C = eccPrimeSq * Math.cos(latRad) ** 2;
+    const A = Math.cos(latRad) * (lonRad - lonOriginRad);
+
+    const M = a * (
+      (1 - eccSq/4 - 3*eccSq**2/64 - 5*eccSq**3/256) * latRad
+      - (3*eccSq/8 + 3*eccSq**2/32 + 45*eccSq**3/1024) * Math.sin(2*latRad)
+      + (15*eccSq**2/256 + 45*eccSq**3/1024) * Math.sin(4*latRad)
+      - (35*eccSq**3/3072) * Math.sin(6*latRad)
+    );
+
+    let easting = k0*N*(A + (1-T+C)*A**3/6 +
+      (5-18*T+T*T+72*C-58*eccPrimeSq)*A**5/120) + 500000.0;
+
+    let northing = k0*(M + N*Math.tan(latRad)*(
+      A*A/2 + (5-T+9*C+4*C*C)*A**4/24 +
+      (61-58*T+T*T+600*C-330*eccPrimeSq)*A**6/720
+    ));
+
+    if (lat < 0) northing += 10000000.0;
+
+    const letter = utmLetter(lat);
+
+    return {
+      zone: zoneNumber,
+      letter: letter,
+      easting: easting,
+      northing: northing
+    };
+  }
+
+  function utmLetter(lat){
+    const letters = "CDEFGHJKLMNPQRSTUVWX";
+    if (lat < -80 || lat > 84) return "Z";
+    const idx = Math.floor((lat + 80) / 8);
+    return letters[Math.min(idx, letters.length - 1)];
+  }
+
+  function fmt(n, decimals){
+    return n.toLocaleString('es-ES', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    });
+  }
+
+  function formatDistance(meters){
+    if (meters >= 1000){
+      return { text: fmt(meters/1000, 2), unit: 'km' };
+    }
+    return { text: fmt(Math.round(meters), 0), unit: 'm' };
+  }
+
+  // ---------- Seguimiento GPS ----------
+
+  function onPosition(pos){
+    clearError();
+    const { latitude, longitude, speed, accuracy } = pos.coords;
+    const now = pos.timestamp;
+
+    // Velocidad: usa el valor del navegador si existe, si no la calcula
+    let speedKmh = 0;
+    if (speed !== null && speed !== undefined && !isNaN(speed)){
+      speedKmh = speed * 3.6;
+    } else if (lastPosition){
+      const dt = (now - lastPosition.time) / 1000;
+      if (dt > 0){
+        const d = haversine(lastPosition.lat, lastPosition.lon, latitude, longitude);
+        speedKmh = (d / dt) * 3.6;
+      }
+    }
+    if (speedKmh < 0.3) speedKmh = 0; // filtra ruido en parado
+    speedValue.textContent = fmt(speedKmh, 1);
+
+    accuracyLine.textContent = `Precisión: ±${Math.round(accuracy)} m`;
+
+    // UTM
+    const utm = toUTM(latitude, longitude);
+    utmZone.textContent = `${utm.zone}${utm.letter}`;
+    utmEasting.textContent = fmt(Math.round(utm.easting), 0) + ' m';
+    utmNorthing.textContent = fmt(Math.round(utm.northing), 0) + ' m';
+
+    // Distancia acumulada
+    if (lastPosition){
+      const d = haversine(lastPosition.lat, lastPosition.lon, latitude, longitude);
+      // ignora saltos absurdos por rebote de señal (> 50 m entre lecturas < 1s)
+      const dt = (now - lastPosition.time) / 1000;
+      const plausible = dt <= 0 || (d / Math.max(dt, 0.5)) < 60; // < 216 km/h
+      if (plausible && d > 0.5){
+        totalDistanceM += d;
+        const f = formatDistance(totalDistanceM);
+        totalDistanceEl.innerHTML = `${f.text}<small>${f.unit}</small>`;
+
+        if (remainingActive){
+          remainingLeftM = Math.max(0, remainingLeftM - d);
+          updateRemainingDisplay();
+        }
+      }
+    }
+
+    lastPosition = { lat: latitude, lon: longitude, time: now };
+  }
+
+  function onError(err){
+    let msg = 'No se pudo obtener la ubicación.';
+    if (err.code === err.PERMISSION_DENIED) msg = 'Permiso de ubicación denegado. Actívalo para usar la app.';
+    else if (err.code === err.POSITION_UNAVAILABLE) msg = 'Ubicación no disponible en este momento.';
+    else if (err.code === err.TIMEOUT) msg = 'Tiempo de espera agotado buscando señal GPS.';
+    showError(msg);
+  }
+
+  function startTracking(){
+    if (!('geolocation' in navigator)){
+      showError('Este dispositivo no soporta geolocalización.');
+      return;
+    }
+    tracking = true;
+    lastPosition = null;
+    trackBtn.textContent = 'Detener seguimiento';
+    trackBtn.classList.add('active');
+    statusDot.classList.add('live');
+    statusText.textContent = 'En vivo';
+
+    watchId = navigator.geolocation.watchPosition(onPosition, onError, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 15000
+    });
+  }
+
+  function stopTracking(){
+    tracking = false;
+    if (watchId !== null){
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+    trackBtn.textContent = 'Iniciar seguimiento';
+    trackBtn.classList.remove('active');
+    statusDot.classList.remove('live');
+    statusText.textContent = 'Detenido';
+    speedValue.textContent = '0.0';
+  }
+
+  trackBtn.addEventListener('click', () => {
+    if (tracking) stopTracking(); else startTracking();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    totalDistanceM = 0;
+    totalDistanceEl.innerHTML = '0<small>m</small>';
+    lastPosition = null;
+  });
+
+  // ---------- Modo distancia restante ----------
+
+  function updateRemainingDisplay(){
+    const f = formatDistance(remainingLeftM);
+    remainingValue.textContent = f.text + (f.unit === 'km' ? ' km' : '');
+    remainingValue.classList.remove('warn', 'arrived');
+
+    if (remainingLeftM <= 0){
+      remainingValue.textContent = '0';
+      remainingValue.classList.add('arrived');
+      arrivedMsg.style.display = 'block';
+      progressFill.style.width = '100%';
+      remainingActive = false;
+      remainingBtn.textContent = 'Iniciar cuenta atrás';
+      remainingBtn.classList.remove('active');
+    } else {
+      arrivedMsg.style.display = 'none';
+      if (remainingInitialM > 0 && remainingLeftM < remainingInitialM * 0.1){
+        remainingValue.classList.add('warn');
+      }
+      const pct = remainingInitialM > 0
+        ? Math.min(100, ((remainingInitialM - remainingLeftM) / remainingInitialM) * 100)
+        : 0;
+      progressFill.style.width = pct + '%';
+    }
+  }
+
+  remainingBtn.addEventListener('click', () => {
+    if (!remainingActive){
+      const val = parseFloat(remainingInput.value);
+      if (!val || val <= 0){
+        showError('Introduce una distancia inicial en metros mayor que 0.');
+        return;
+      }
+      clearError();
+      remainingInitialM = val;
+      remainingLeftM = val;
+      remainingActive = true;
+      remainingBtn.textContent = 'Pausar cuenta atrás';
+      remainingBtn.classList.add('active');
+      remainingInput.disabled = true;
+      updateRemainingDisplay();
+
+      if (!tracking) startTracking();
+    } else {
+      remainingActive = false;
+      remainingBtn.textContent = 'Reanudar cuenta atrás';
+      remainingBtn.classList.remove('active');
+    }
+  });
+
+  remainingResetBtn.addEventListener('click', () => {
+    remainingActive = false;
+    remainingInitialM = 0;
+    remainingLeftM = 0;
+    remainingInput.value = '';
+    remainingInput.disabled = false;
+    remainingBtn.textContent = 'Iniciar cuenta atrás';
+    remainingBtn.classList.remove('active');
+    remainingValue.textContent = '—';
+    remainingValue.classList.remove('warn', 'arrived');
+    arrivedMsg.style.display = 'none';
+    progressFill.style.width = '0%';
+  });
+
+})();
+</script>
+</body>
+</html>
