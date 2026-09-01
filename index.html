@@ -5,622 +5,563 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Odómetro GPS</title>
 <style>
-  :root{
-    --bg: #0B0F14;
-    --panel: #131A22;
-    --panel-border: #223140;
-    --text: #E7EEF3;
-    --text-dim: #7C8B99;
-    --accent: #35D0C0;
-    --accent-dim: #1E7A70;
-    --warn: #F2B640;
-    --danger: #E5484D;
-    --mono: ui-monospace, "SF Mono", "IBM Plex Mono", "Cascadia Code", monospace;
-    --sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  :root {
+    --bg: #0a0a0a;
+    --panel: #161616;
+    --panel2: #1e1e1e;
+    --accent: #00e676;
+    --accent-dim: #00c264;
+    --warn: #ff5252;
+    --text: #f5f5f5;
+    --text-dim: #9a9a9a;
+    --border: #2a2a2a;
   }
-  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body{
-    margin:0; padding:0;
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: var(--sans);
-    min-height: 100vh;
-    overscroll-behavior-y: contain;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    overscroll-behavior: none;
   }
-  body{
-    display:flex;
-    justify-content:center;
+  .app { max-width: 480px; margin: 0 auto; padding: 14px 14px 30px; }
+
+  h1 { font-size: 18px; text-align: center; margin: 6px 0 14px; letter-spacing: 1px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; }
+
+  .status {
+    text-align: center; font-size: 12px; padding: 6px 10px; border-radius: 8px;
+    margin-bottom: 12px; background: var(--panel); color: var(--text-dim); border: 1px solid var(--border);
   }
-  .app{
-    width:100%;
-    max-width: 480px;
-    padding: 20px 16px 32px;
-    min-height:100vh;
+  .status.ok { color: var(--accent); border-color: var(--accent-dim); }
+  .status.err { color: var(--warn); border-color: var(--warn); }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 16px; margin-bottom: 12px;
   }
 
-  header{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    padding: 4px 4px 20px;
-  }
-  header h1{
-    font-size: 15px;
-    font-weight: 600;
-    margin:0;
-    letter-spacing: 0.2px;
-  }
-  .status{
-    display:flex;
-    align-items:center;
-    gap:6px;
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text-dim);
-  }
-  .dot{
-    width:8px; height:8px; border-radius:50%;
-    background: var(--text-dim);
-    flex-shrink:0;
-  }
-  .dot.live{
-    background: var(--accent);
-    animation: pulse 1.8s ease-in-out infinite;
-  }
-  @keyframes pulse{
-    0%,100%{ box-shadow: 0 0 0 0 rgba(53,208,192,0.55); }
-    50%{ box-shadow: 0 0 0 6px rgba(53,208,192,0); }
-  }
+  .speed-card { text-align: center; padding: 22px 16px; }
+  .speed-value { font-size: 64px; font-weight: 800; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .speed-unit { font-size: 16px; color: var(--text-dim); margin-top: 4px; letter-spacing: 2px; }
+  .accuracy-tag { font-size: 11px; color: var(--text-dim); margin-top: 8px; }
+  .accuracy-tag.bad { color: var(--warn); }
 
-  .speed-panel{
-    background: linear-gradient(180deg, var(--panel), #0F151C);
-    border: 1px solid var(--panel-border);
-    border-radius: 18px;
-    padding: 28px 20px 22px;
-    text-align:center;
-    margin-bottom: 14px;
-  }
-  .speed-value{
-    font-family: var(--mono);
-    font-size: 64px;
-    font-weight: 600;
-    line-height:1;
-    color: var(--accent);
-    font-variant-numeric: tabular-nums;
-  }
-  .speed-unit{
-    margin-top: 6px;
-    font-size: 13px;
-    color: var(--text-dim);
-  }
-  .accuracy-line{
-    margin-top: 14px;
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text-dim);
-  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+  .value { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .value.small { font-size: 15px; }
 
-  .grid{
-    display:grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-  .card{
-    background: var(--panel);
-    border: 1px solid var(--panel-border);
-    border-radius: 14px;
-    padding: 14px 16px;
-  }
-  .card.full{ grid-column: 1 / -1; }
-  .card .label{
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-bottom: 6px;
-  }
-  .card .value{
-    font-family: var(--mono);
-    font-size: 20px;
-    font-variant-numeric: tabular-nums;
-    word-break: break-all;
-  }
-  .card .value small{
-    font-size: 12px;
-    color: var(--text-dim);
-    font-family: var(--sans);
-    margin-left: 4px;
-  }
+  .utm-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .utm-row:last-child { border-bottom: none; }
+  .utm-label { color: var(--text-dim); font-size: 13px; }
+  .utm-value { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 14px; }
 
-  .distance-value{
-    font-size: 26px;
+  button {
+    font-family: inherit; border: none; border-radius: 12px; padding: 16px;
+    font-size: 16px; font-weight: 700; width: 100%; cursor: pointer;
+    -webkit-appearance: none; letter-spacing: 0.5px;
   }
+  .btn-primary { background: var(--accent); color: #002d15; }
+  .btn-primary:active { background: var(--accent-dim); }
+  .btn-secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:active { background: #262626; }
+  .btn-danger { background: var(--warn); color: #2d0000; }
+  .btn-row { display: flex; gap: 10px; margin-top: 10px; }
+  .btn-row button { flex: 1; }
 
-  .controls{
-    display:flex;
-    gap:10px;
-    margin: 16px 0 22px;
+  input[type="number"] {
+    width: 100%; background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    font-size: 18px; padding: 14px; border-radius: 10px; font-variant-numeric: tabular-nums;
+    margin-bottom: 10px; text-align: center;
   }
-  button{
-    font-family: var(--sans);
-    border: none;
-    border-radius: 14px;
-    padding: 16px 14px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: transform 0.08s ease, opacity 0.15s ease;
-  }
-  button:active{ transform: scale(0.97); }
-  .btn-main{
-    flex: 2;
-    background: var(--accent);
-    color: #06201C;
-  }
-  .btn-main.active{
-    background: var(--danger);
-    color: #2B0708;
-  }
-  .btn-secondary{
-    flex: 1;
-    background: transparent;
-    color: var(--text-dim);
-    border: 1px solid var(--panel-border);
-  }
+  input[type="number"]:focus { outline: none; border-color: var(--accent); }
 
-  .section-title{
-    font-size: 13px;
-    color: var(--text-dim);
-    margin: 6px 4px 10px;
-  }
+  .progress-wrap { background: var(--panel2); border-radius: 10px; height: 14px; overflow: hidden; margin: 10px 0; }
+  .progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s ease; }
 
-  .remaining-panel{
-    background: var(--panel);
-    border: 1px solid var(--panel-border);
-    border-radius: 18px;
-    padding: 18px;
-  }
-  .remaining-input-row{
-    display:flex;
-    gap:10px;
-    margin-bottom: 14px;
-  }
-  .remaining-input-row input{
-    flex:1;
-    min-width:0;
-    background: var(--bg);
-    border: 1px solid var(--panel-border);
-    border-radius: 12px;
-    padding: 14px;
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 17px;
-  }
-  .remaining-input-row input:focus{
-    outline: none;
-    border-color: var(--accent);
-  }
-  .remaining-input-row input::placeholder{ color: var(--text-dim); }
+  .remaining-value { text-align: center; font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 8px 0; }
+  .remaining-value.done { color: var(--accent); }
 
-  .remaining-display{
-    text-align:center;
-    padding: 16px 0 6px;
-  }
-  .remaining-display .value{
-    font-family: var(--mono);
-    font-size: 46px;
-    font-weight: 600;
-    color: var(--text);
-    font-variant-numeric: tabular-nums;
-  }
-  .remaining-display .value.warn{ color: var(--warn); }
-  .remaining-display .value.arrived{ color: var(--accent); }
-  .remaining-display .unit{
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-top: 4px;
-  }
-  .remaining-display .arrived-msg{
-    font-size: 14px;
-    color: var(--accent);
-    margin-top: 8px;
-    font-weight: 600;
-  }
+  .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); margin: 4px 0 10px; }
 
-  .progress-track{
-    height: 8px;
-    border-radius: 4px;
-    background: var(--bg);
-    border: 1px solid var(--panel-border);
-    overflow:hidden;
-    margin-top: 10px;
-  }
-  .progress-fill{
-    height:100%;
-    background: var(--accent);
-    width: 0%;
-    transition: width 0.3s ease;
-  }
-
-  .remaining-controls{
-    display:flex;
-    gap:10px;
-    margin-top: 14px;
-  }
-
-  .error-banner{
-    background: #2A1416;
-    border: 1px solid #4A2226;
-    color: #F3B7BA;
-    border-radius: 12px;
-    padding: 12px 14px;
-    font-size: 13px;
-    margin-bottom: 14px;
-    display:none;
-  }
-  .error-banner.show{ display:block; }
+  .badge { display: inline-block; font-size: 11px; padding: 3px 8px; border-radius: 20px; background: var(--panel2); color: var(--text-dim); margin-left: 6px; }
+  .badge.live { background: rgba(0,230,118,0.15); color: var(--accent); }
 </style>
 </head>
 <body>
 <div class="app">
+  <h1>Odómetro GPS</h1>
+  <div id="status" class="status">Esperando señal GPS…</div>
+  <button class="btn-secondary" id="wakeLockBtn" style="margin-bottom:12px;">🔆 Mantener pantalla encendida: OFF</button>
 
-  <header>
-    <h1>Odómetro GPS</h1>
-    <div class="status">
-      <span class="dot" id="statusDot"></span>
-      <span id="statusText">Detenido</span>
-    </div>
-  </header>
-
-  <div class="error-banner" id="errorBanner"></div>
-
-  <div class="speed-panel">
+  <div class="card speed-card">
     <div class="speed-value" id="speedValue">0.0</div>
-    <div class="speed-unit">km/h</div>
-    <div class="accuracy-line" id="accuracyLine">Precisión: —</div>
+    <div class="speed-unit">KM/H</div>
+    <div class="accuracy-tag" id="accuracyTag">precisión: --</div>
   </div>
 
-  <div class="grid">
-    <div class="card">
-      <div class="label">Zona UTM</div>
-      <div class="value" id="utmZone">—</div>
-    </div>
-    <div class="card">
-      <div class="label">Distancia total</div>
-      <div class="value distance-value" id="totalDistance">0<small>m</small></div>
-    </div>
-    <div class="card full">
-      <div class="label">Este (Easting)</div>
-      <div class="value" id="utmEasting">—</div>
-    </div>
-    <div class="card full">
-      <div class="label">Norte (Northing)</div>
-      <div class="value" id="utmNorthing">—</div>
-    </div>
+  <div class="card">
+    <div class="section-title">Coordenadas UTM</div>
+    <div class="utm-row"><span class="utm-label">Zona</span><span class="utm-value" id="utmZone">--</span></div>
+    <div class="utm-row"><span class="utm-label">Easting (X)</span><span class="utm-value" id="utmEasting">--</span></div>
+    <div class="utm-row"><span class="utm-label">Northing (Y)</span><span class="utm-value" id="utmNorthing">--</span></div>
+    <div class="utm-row"><span class="utm-label">Lat / Lon</span><span class="utm-value" id="latLon" style="font-size:12px;">--</span></div>
   </div>
 
-  <div class="controls">
-    <button class="btn-main" id="trackBtn">Iniciar seguimiento</button>
-    <button class="btn-secondary" id="resetBtn">Reiniciar</button>
-  </div>
-
-  <div class="section-title">Distancia restante</div>
-  <div class="remaining-panel">
-    <div class="remaining-input-row">
-      <input type="number" id="remainingInput" placeholder="Distancia inicial en metros" inputmode="numeric" min="0">
+  <div class="card">
+    <div class="section-title">Distancia total recorrida</div>
+    <div class="grid2">
+      <div>
+        <div class="label">Distancia</div>
+        <div class="value" id="totalDistance">0 m</div>
+      </div>
+      <div>
+        <div class="label">Vel. media</div>
+        <div class="value small" id="avgSpeed">0.0 km/h</div>
+      </div>
     </div>
-
-    <div class="remaining-display">
-      <div class="value" id="remainingValue">—</div>
-      <div class="unit">metros restantes</div>
-      <div class="arrived-msg" id="arrivedMsg" style="display:none;">Has llegado al destino</div>
-      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
-    </div>
-
-    <div class="remaining-controls">
-      <button class="btn-main" id="remainingBtn">Iniciar cuenta atrás</button>
-      <button class="btn-secondary" id="remainingResetBtn">Borrar</button>
+    <div class="btn-row">
+      <button class="btn-secondary" id="resetTotalBtn">Reiniciar total</button>
     </div>
   </div>
 
+  <div class="card">
+    <div class="section-title">Distancia restante <span class="badge" id="countdownBadge">inactivo</span></div>
+    <div id="setupBlock">
+      <input type="number" id="initialMeters" placeholder="Metros a recorrer" inputmode="numeric">
+      <button class="btn-primary" id="startCountdownBtn">Iniciar cuenta atrás</button>
+    </div>
+    <div id="activeBlock" style="display:none;">
+      <div class="remaining-value" id="remainingValue">0 m</div>
+      <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
+      <div style="text-align:center; font-size:12px; color:var(--text-dim); margin-bottom:6px;">
+        Recorrido desde el inicio: <span id="walkedSinceStart">0 m</span>
+      </div>
+      <div class="btn-row">
+        <button class="btn-secondary" id="pauseCountdownBtn">Pausar</button>
+        <button class="btn-danger" id="stopCountdownBtn">Detener</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
-(function(){
+(function () {
   "use strict";
 
-  // ---------- Estado ----------
+  // ---------- Estado global ----------
+  let lastPos = null;          // última posición válida {lat, lon, t, speed}
+  let totalDistanceM = 0;      // distancia total acumulada (Haversine tramo a tramo)
+  let totalTimeMovingS = 0;    // tiempo en movimiento (para vel. media)
   let watchId = null;
-  let tracking = false;
-  let lastPosition = null;   // { lat, lon, time }
-  let totalDistanceM = 0;
 
-  let remainingActive = false;
-  let remainingInitialM = 0;
-  let remainingLeftM = 0;
+  // Countdown ("Distancia restante") anclado a una posición de inicio
+  let countdown = {
+    active: false,
+    paused: false,
+    initialMeters: 0,
+    startLat: null,
+    startLon: null
+  };
 
-  // ---------- Elementos ----------
-  const speedValue = document.getElementById('speedValue');
-  const accuracyLine = document.getElementById('accuracyLine');
-  const utmZone = document.getElementById('utmZone');
-  const utmEasting = document.getElementById('utmEasting');
-  const utmNorthing = document.getElementById('utmNorthing');
-  const totalDistanceEl = document.getElementById('totalDistance');
-  const trackBtn = document.getElementById('trackBtn');
-  const resetBtn = document.getElementById('resetBtn');
-  const statusDot = document.getElementById('statusDot');
-  const statusText = document.getElementById('statusText');
-  const errorBanner = document.getElementById('errorBanner');
+  const MAX_PLAUSIBLE_SPEED_MS = 60; // ~216 km/h, filtro de saltos absurdos
+  const MIN_ACCURACY_FOR_DISTANCE = 30; // metros; por encima de esto no sumamos a la distancia
 
-  const remainingInput = document.getElementById('remainingInput');
-  const remainingBtn = document.getElementById('remainingBtn');
-  const remainingResetBtn = document.getElementById('remainingResetBtn');
-  const remainingValue = document.getElementById('remainingValue');
-  const arrivedMsg = document.getElementById('arrivedMsg');
-  const progressFill = document.getElementById('progressFill');
+  let wakeLock = null;
+  const STORAGE_KEY = "odometro_gps_trayecto_v1";
+  let saveTimer = null;
+
+  // ---------- Vibración ----------
+  function vibrate(pattern) {
+    if ("vibrate" in navigator) {
+      try { navigator.vibrate(pattern); } catch (e) { /* no soportado */ }
+    }
+  }
+
+  // ---------- Wake Lock (pantalla encendida) ----------
+  async function requestWakeLock() {
+    if (!("wakeLock" in navigator)) {
+      alert("Tu navegador no soporta Wake Lock API. Prueba con Chrome en Android.");
+      return;
+    }
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", function () {
+        updateWakeLockBtn(false);
+      });
+      updateWakeLockBtn(true);
+    } catch (err) {
+      alert("No se pudo mantener la pantalla encendida: " + err.message);
+    }
+  }
+
+  function releaseWakeLock() {
+    if (wakeLock) {
+      wakeLock.release();
+      wakeLock = null;
+    }
+    updateWakeLockBtn(false);
+  }
+
+  function updateWakeLockBtn(active) {
+    const btn = document.getElementById("wakeLockBtn");
+    btn.textContent = active
+      ? "🔆 Mantener pantalla encendida: ON"
+      : "🔆 Mantener pantalla encendida: OFF";
+    btn.style.color = active ? "#00e676" : "";
+  }
+
+  // Si la pestaña vuelve a estar visible y el wake lock estaba activo, hay que repedirlo
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible" && wakeLock === null &&
+        document.getElementById("wakeLockBtn").textContent.includes("ON")) {
+      requestWakeLock();
+    }
+  });
+
+  // ---------- Persistencia en localStorage ----------
+  function saveTrip() {
+    try {
+      const data = {
+        totalDistanceM: totalDistanceM,
+        totalTimeMovingS: totalTimeMovingS,
+        countdown: countdown.active ? {
+          active: true,
+          paused: countdown.paused,
+          initialMeters: countdown.initialMeters,
+          startLat: countdown.startLat,
+          startLon: countdown.startLon
+        } : { active: false },
+        savedAt: Date.now()
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) { /* almacenamiento no disponible o lleno */ }
+  }
+
+  function scheduleSave() {
+    // Evita escrituras excesivas en cada lectura GPS: guarda como máximo cada 3s
+    if (saveTimer) return;
+    saveTimer = setTimeout(function () {
+      saveTrip();
+      saveTimer = null;
+    }, 3000);
+  }
+
+  function loadTrip() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (!data) return;
+
+      totalDistanceM = data.totalDistanceM || 0;
+      totalTimeMovingS = data.totalTimeMovingS || 0;
+      el.totalDistance.textContent = formatMeters(totalDistanceM);
+      const avgKmh = totalTimeMovingS > 0 ? (totalDistanceM / totalTimeMovingS) * 3.6 : 0;
+      el.avgSpeed.textContent = avgKmh.toFixed(1) + " km/h";
+
+      if (data.countdown && data.countdown.active) {
+        countdown.active = true;
+        countdown.paused = data.countdown.paused;
+        countdown.initialMeters = data.countdown.initialMeters;
+        countdown.startLat = data.countdown.startLat;
+        countdown.startLon = data.countdown.startLon;
+
+        el.setupBlock.style.display = "none";
+        el.activeBlock.style.display = "block";
+        el.countdownBadge.textContent = countdown.paused ? "en pausa" : "en directo";
+        el.countdownBadge.classList.toggle("live", !countdown.paused);
+        el.pauseCountdownBtn.textContent = countdown.paused ? "Reanudar" : "Pausar";
+      }
+    } catch (e) { /* datos corruptos o no disponibles */ }
+  }
+
+  function clearSavedTrip() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+  }
 
   // ---------- Utilidades ----------
+  function toRad(deg) { return deg * Math.PI / 180; }
 
-  function showError(msg){
-    errorBanner.textContent = msg;
-    errorBanner.classList.add('show');
-  }
-  function clearError(){
-    errorBanner.classList.remove('show');
-  }
-
-  // Distancia Haversine en metros
-  function haversine(lat1, lon1, lat2, lon2){
+  function haversineMeters(lat1, lon1, lat2, lon2) {
     const R = 6371000;
-    const toRad = d => d * Math.PI / 180;
     const dLat = toRad(lat2 - lat1);
     const dLon = toRad(lon2 - lon1);
-    const a = Math.sin(dLat/2)**2 +
-              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+              Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
 
-  // Conversión lat/lon (WGS84) a UTM
-  function toUTM(lat, lon){
-    const a = 6378137.0;
-    const eccSq = 0.00669438;
-    const k0 = 0.9996;
+  function formatMeters(m) {
+    if (m >= 1000) return (m / 1000).toFixed(2) + " km";
+    return Math.round(m) + " m";
+  }
 
-    const latRad = lat * Math.PI / 180;
-    const lonRad = lon * Math.PI / 180;
+  // ---------- Conversión a UTM (WGS84) ----------
+  function latLonToUTM(lat, lon) {
+    const a = 6378137.0;
+    const f = 1 / 298.257223563;
+    const k0 = 0.9996;
+    const e = Math.sqrt(f * (2 - f));
+    const e2 = e * e;
+    const ep2 = e2 / (1 - e2);
 
     let zoneNumber = Math.floor((lon + 180) / 6) + 1;
-    // Excepciones de Noruega/Svalbard
-    if (lat >= 56 && lat < 64 && lon >= 3 && lon < 12) zoneNumber = 32;
-    if (lat >= 72 && lat < 84){
-      if (lon >= 0 && lon < 9) zoneNumber = 31;
-      else if (lon >= 9 && lon < 21) zoneNumber = 33;
-      else if (lon >= 21 && lon < 33) zoneNumber = 35;
-      else if (lon >= 33 && lon < 42) zoneNumber = 37;
+    // Excepciones: Noruega y Svalbard
+    if (lat >= 56.0 && lat < 64.0 && lon >= 3.0 && lon < 12.0) zoneNumber = 32;
+    if (lat >= 72.0 && lat < 84.0) {
+      if (lon >= 0.0 && lon < 9.0) zoneNumber = 31;
+      else if (lon >= 9.0 && lon < 21.0) zoneNumber = 33;
+      else if (lon >= 21.0 && lon < 33.0) zoneNumber = 35;
+      else if (lon >= 33.0 && lon < 42.0) zoneNumber = 37;
     }
 
-    const lonOrigin = (zoneNumber - 1) * 6 - 180 + 3;
-    const lonOriginRad = lonOrigin * Math.PI / 180;
-    const eccPrimeSq = eccSq / (1 - eccSq);
+    const lonOrigin = toRad((zoneNumber - 1) * 6 - 180 + 3);
+    const latRad = toRad(lat);
+    const lonRad = toRad(lon);
 
-    const N = a / Math.sqrt(1 - eccSq * Math.sin(latRad) ** 2);
+    const N = a / Math.sqrt(1 - e2 * Math.sin(latRad) ** 2);
     const T = Math.tan(latRad) ** 2;
-    const C = eccPrimeSq * Math.cos(latRad) ** 2;
-    const A = Math.cos(latRad) * (lonRad - lonOriginRad);
+    const C = ep2 * Math.cos(latRad) ** 2;
+    const A = Math.cos(latRad) * (lonRad - lonOrigin);
 
     const M = a * (
-      (1 - eccSq/4 - 3*eccSq**2/64 - 5*eccSq**3/256) * latRad
-      - (3*eccSq/8 + 3*eccSq**2/32 + 45*eccSq**3/1024) * Math.sin(2*latRad)
-      + (15*eccSq**2/256 + 45*eccSq**3/1024) * Math.sin(4*latRad)
-      - (35*eccSq**3/3072) * Math.sin(6*latRad)
+      (1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * Math.pow(e2, 3) / 256) * latRad -
+      (3 * e2 / 8 + 3 * e2 * e2 / 32 + 45 * Math.pow(e2, 3) / 1024) * Math.sin(2 * latRad) +
+      (15 * e2 * e2 / 256 + 45 * Math.pow(e2, 3) / 1024) * Math.sin(4 * latRad) -
+      (35 * Math.pow(e2, 3) / 3072) * Math.sin(6 * latRad)
     );
 
-    let easting = k0*N*(A + (1-T+C)*A**3/6 +
-      (5-18*T+T*T+72*C-58*eccPrimeSq)*A**5/120) + 500000.0;
+    let easting = k0 * N * (
+      A + (1 - T + C) * Math.pow(A, 3) / 6 +
+      (5 - 18 * T + T * T + 72 * C - 58 * ep2) * Math.pow(A, 5) / 120
+    ) + 500000.0;
 
-    let northing = k0*(M + N*Math.tan(latRad)*(
-      A*A/2 + (5-T+9*C+4*C*C)*A**4/24 +
-      (61-58*T+T*T+600*C-330*eccPrimeSq)*A**6/720
-    ));
+    let northing = k0 * (
+      M + N * Math.tan(latRad) * (
+        A * A / 2 + (5 - T + 9 * C + 4 * C * C) * Math.pow(A, 4) / 24 +
+        (61 - 58 * T + T * T + 600 * C - 330 * ep2) * Math.pow(A, 6) / 720
+      )
+    );
 
     if (lat < 0) northing += 10000000.0;
 
-    const letter = utmLetter(lat);
-
+    const hemisphere = lat >= 0 ? "N" : "S";
     return {
-      zone: zoneNumber,
-      letter: letter,
+      zone: zoneNumber + hemisphere,
       easting: easting,
       northing: northing
     };
   }
 
-  function utmLetter(lat){
-    const letters = "CDEFGHJKLMNPQRSTUVWX";
-    if (lat < -80 || lat > 84) return "Z";
-    const idx = Math.floor((lat + 80) / 8);
-    return letters[Math.min(idx, letters.length - 1)];
+  // ---------- Elementos DOM ----------
+  const el = {
+    status: document.getElementById("status"),
+    speedValue: document.getElementById("speedValue"),
+    accuracyTag: document.getElementById("accuracyTag"),
+    utmZone: document.getElementById("utmZone"),
+    utmEasting: document.getElementById("utmEasting"),
+    utmNorthing: document.getElementById("utmNorthing"),
+    latLon: document.getElementById("latLon"),
+    totalDistance: document.getElementById("totalDistance"),
+    avgSpeed: document.getElementById("avgSpeed"),
+    resetTotalBtn: document.getElementById("resetTotalBtn"),
+    setupBlock: document.getElementById("setupBlock"),
+    activeBlock: document.getElementById("activeBlock"),
+    initialMeters: document.getElementById("initialMeters"),
+    startCountdownBtn: document.getElementById("startCountdownBtn"),
+    remainingValue: document.getElementById("remainingValue"),
+    progressBar: document.getElementById("progressBar"),
+    walkedSinceStart: document.getElementById("walkedSinceStart"),
+    pauseCountdownBtn: document.getElementById("pauseCountdownBtn"),
+    stopCountdownBtn: document.getElementById("stopCountdownBtn"),
+    countdownBadge: document.getElementById("countdownBadge")
+  };
+
+  function setStatus(msg, type) {
+    el.status.textContent = msg;
+    el.status.className = "status" + (type ? " " + type : "");
   }
 
-  function fmt(n, decimals){
-    return n.toLocaleString('es-ES', {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals
-    });
-  }
-
-  function formatDistance(meters){
-    if (meters >= 1000){
-      return { text: fmt(meters/1000, 2), unit: 'km' };
-    }
-    return { text: fmt(Math.round(meters), 0), unit: 'm' };
-  }
-
-  // ---------- Seguimiento GPS ----------
-
-  function onPosition(pos){
-    clearError();
+  // ---------- Render de posición ----------
+  function renderPosition(pos) {
     const { latitude, longitude, speed, accuracy } = pos.coords;
-    const now = pos.timestamp;
-
-    // Velocidad: usa el valor del navegador si existe, si no la calcula
-    let speedKmh = 0;
-    if (speed !== null && speed !== undefined && !isNaN(speed)){
-      speedKmh = speed * 3.6;
-    } else if (lastPosition){
-      const dt = (now - lastPosition.time) / 1000;
-      if (dt > 0){
-        const d = haversine(lastPosition.lat, lastPosition.lon, latitude, longitude);
-        speedKmh = (d / dt) * 3.6;
-      }
-    }
-    if (speedKmh < 0.3) speedKmh = 0; // filtra ruido en parado
-    speedValue.textContent = fmt(speedKmh, 1);
-
-    accuracyLine.textContent = `Precisión: ±${Math.round(accuracy)} m`;
 
     // UTM
-    const utm = toUTM(latitude, longitude);
-    utmZone.textContent = `${utm.zone}${utm.letter}`;
-    utmEasting.textContent = fmt(Math.round(utm.easting), 0) + ' m';
-    utmNorthing.textContent = fmt(Math.round(utm.northing), 0) + ' m';
+    const utm = latLonToUTM(latitude, longitude);
+    el.utmZone.textContent = utm.zone;
+    el.utmEasting.textContent = Math.round(utm.easting) + " m";
+    el.utmNorthing.textContent = Math.round(utm.northing) + " m";
+    el.latLon.textContent = latitude.toFixed(6) + ", " + longitude.toFixed(6);
 
-    // Distancia acumulada
-    if (lastPosition){
-      const d = haversine(lastPosition.lat, lastPosition.lon, latitude, longitude);
-      // ignora saltos absurdos por rebote de señal (> 50 m entre lecturas < 1s)
-      const dt = (now - lastPosition.time) / 1000;
-      const plausible = dt <= 0 || (d / Math.max(dt, 0.5)) < 60; // < 216 km/h
-      if (plausible && d > 0.5){
-        totalDistanceM += d;
-        const f = formatDistance(totalDistanceM);
-        totalDistanceEl.innerHTML = `${f.text}<small>${f.unit}</small>`;
-
-        if (remainingActive){
-          remainingLeftM = Math.max(0, remainingLeftM - d);
-          updateRemainingDisplay();
-        }
-      }
+    // Precisión
+    if (accuracy != null) {
+      el.accuracyTag.textContent = "precisión: ±" + Math.round(accuracy) + " m";
+      el.accuracyTag.className = "accuracy-tag" + (accuracy > MIN_ACCURACY_FOR_DISTANCE ? " bad" : "");
     }
 
-    lastPosition = { lat: latitude, lon: longitude, time: now };
+    // Velocidad: usa GPS si está disponible y es plausible, si no calcula por Haversine/tiempo
+    let speedKmh = null;
+    const now = pos.timestamp || Date.now();
+
+    if (speed != null && !isNaN(speed) && speed >= 0) {
+      speedKmh = speed * 3.6;
+    } else if (lastPos) {
+      const dt = (now - lastPos.t) / 1000;
+      if (dt > 0) {
+        const d = haversineMeters(lastPos.lat, lastPos.lon, latitude, longitude);
+        const v = d / dt;
+        if (v <= MAX_PLAUSIBLE_SPEED_MS) speedKmh = v * 3.6;
+      }
+    }
+    if (speedKmh == null) speedKmh = 0;
+    // Filtro de ruido en parado
+    if (speedKmh < 1.0) speedKmh = 0;
+    el.speedValue.textContent = speedKmh.toFixed(1);
+
+    // Distancia total acumulada (solo si la precisión es razonable)
+    if (lastPos && (accuracy == null || accuracy <= MIN_ACCURACY_FOR_DISTANCE)) {
+      const dt = (now - lastPos.t) / 1000;
+      const d = haversineMeters(lastPos.lat, lastPos.lon, latitude, longitude);
+      const impliedSpeed = dt > 0 ? d / dt : 0;
+      // Descarta saltos de posición implausibles (rebotes de señal)
+      if (impliedSpeed <= MAX_PLAUSIBLE_SPEED_MS && d < 500) {
+        totalDistanceM += d;
+        if (speedKmh > 0) totalTimeMovingS += dt;
+      }
+    }
+    el.totalDistance.textContent = formatMeters(totalDistanceM);
+    const avgKmh = totalTimeMovingS > 0 ? (totalDistanceM / totalTimeMovingS) * 3.6 : 0;
+    el.avgSpeed.textContent = avgKmh.toFixed(1) + " km/h";
+
+    // Distancia restante: anclada a la posición de INICIO del contador,
+    // no a la suma incremental (evita arrastre de error).
+    if (countdown.active && !countdown.paused && countdown.startLat != null) {
+      const walked = haversineMeters(countdown.startLat, countdown.startLon, latitude, longitude);
+      const remaining = countdown.initialMeters - walked;
+      updateCountdownUI(walked, remaining);
+    }
+
+    lastPos = { lat: latitude, lon: longitude, t: now };
+    setStatus("Señal GPS activa", "ok");
+    scheduleSave();
   }
 
-  function onError(err){
-    let msg = 'No se pudo obtener la ubicación.';
-    if (err.code === err.PERMISSION_DENIED) msg = 'Permiso de ubicación denegado. Actívalo para usar la app.';
-    else if (err.code === err.POSITION_UNAVAILABLE) msg = 'Ubicación no disponible en este momento.';
-    else if (err.code === err.TIMEOUT) msg = 'Tiempo de espera agotado buscando señal GPS.';
-    showError(msg);
+  function updateCountdownUI(walked, remaining) {
+    const clampedRemaining = Math.max(0, remaining);
+    el.walkedSinceStart.textContent = formatMeters(walked);
+    el.remainingValue.textContent = formatMeters(clampedRemaining);
+    const pct = countdown.initialMeters > 0
+      ? Math.min(100, (walked / countdown.initialMeters) * 100)
+      : 0;
+    el.progressBar.style.width = pct + "%";
+
+    if (remaining <= 0) {
+      const yaEstabaCompletado = el.remainingValue.classList.contains("done");
+      el.remainingValue.classList.add("done");
+      el.remainingValue.textContent = "¡Llegaste! 0 m";
+      el.countdownBadge.textContent = "completado";
+      el.countdownBadge.classList.remove("live");
+      if (!yaEstabaCompletado) {
+        vibrate([300, 100, 300, 100, 500]);
+      }
+    }
   }
 
-  function startTracking(){
-    if (!('geolocation' in navigator)){
-      showError('Este dispositivo no soporta geolocalización.');
+  // ---------- Geolocalización ----------
+  function startWatch() {
+    if (!("geolocation" in navigator)) {
+      setStatus("Este navegador no soporta geolocalización", "err");
       return;
     }
-    tracking = true;
-    lastPosition = null;
-    trackBtn.textContent = 'Detener seguimiento';
-    trackBtn.classList.add('active');
-    statusDot.classList.add('live');
-    statusText.textContent = 'En vivo';
-
-    watchId = navigator.geolocation.watchPosition(onPosition, onError, {
-      enableHighAccuracy: true,
-      maximumAge: 0,
-      timeout: 15000
-    });
+    watchId = navigator.geolocation.watchPosition(
+      renderPosition,
+      function (err) {
+        let msg = "Error de GPS";
+        if (err.code === err.PERMISSION_DENIED) msg = "Permiso de ubicación denegado";
+        else if (err.code === err.POSITION_UNAVAILABLE) msg = "Ubicación no disponible";
+        else if (err.code === err.TIMEOUT) msg = "Tiempo de espera agotado buscando señal";
+        setStatus(msg, "err");
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 15000
+      }
+    );
   }
 
-  function stopTracking(){
-    tracking = false;
-    if (watchId !== null){
-      navigator.geolocation.clearWatch(watchId);
-      watchId = null;
-    }
-    trackBtn.textContent = 'Iniciar seguimiento';
-    trackBtn.classList.remove('active');
-    statusDot.classList.remove('live');
-    statusText.textContent = 'Detenido';
-    speedValue.textContent = '0.0';
-  }
-
-  trackBtn.addEventListener('click', () => {
-    if (tracking) stopTracking(); else startTracking();
-  });
-
-  resetBtn.addEventListener('click', () => {
+  // ---------- Botones ----------
+  el.resetTotalBtn.addEventListener("click", function () {
     totalDistanceM = 0;
-    totalDistanceEl.innerHTML = '0<small>m</small>';
-    lastPosition = null;
+    totalTimeMovingS = 0;
+    el.totalDistance.textContent = "0 m";
+    el.avgSpeed.textContent = "0.0 km/h";
+    saveTrip();
   });
 
-  // ---------- Modo distancia restante ----------
-
-  function updateRemainingDisplay(){
-    const f = formatDistance(remainingLeftM);
-    remainingValue.textContent = f.text + (f.unit === 'km' ? ' km' : '');
-    remainingValue.classList.remove('warn', 'arrived');
-
-    if (remainingLeftM <= 0){
-      remainingValue.textContent = '0';
-      remainingValue.classList.add('arrived');
-      arrivedMsg.style.display = 'block';
-      progressFill.style.width = '100%';
-      remainingActive = false;
-      remainingBtn.textContent = 'Iniciar cuenta atrás';
-      remainingBtn.classList.remove('active');
+  document.getElementById("wakeLockBtn").addEventListener("click", function () {
+    if (wakeLock) {
+      releaseWakeLock();
     } else {
-      arrivedMsg.style.display = 'none';
-      if (remainingInitialM > 0 && remainingLeftM < remainingInitialM * 0.1){
-        remainingValue.classList.add('warn');
-      }
-      const pct = remainingInitialM > 0
-        ? Math.min(100, ((remainingInitialM - remainingLeftM) / remainingInitialM) * 100)
-        : 0;
-      progressFill.style.width = pct + '%';
-    }
-  }
-
-  remainingBtn.addEventListener('click', () => {
-    if (!remainingActive){
-      const val = parseFloat(remainingInput.value);
-      if (!val || val <= 0){
-        showError('Introduce una distancia inicial en metros mayor que 0.');
-        return;
-      }
-      clearError();
-      remainingInitialM = val;
-      remainingLeftM = val;
-      remainingActive = true;
-      remainingBtn.textContent = 'Pausar cuenta atrás';
-      remainingBtn.classList.add('active');
-      remainingInput.disabled = true;
-      updateRemainingDisplay();
-
-      if (!tracking) startTracking();
-    } else {
-      remainingActive = false;
-      remainingBtn.textContent = 'Reanudar cuenta atrás';
-      remainingBtn.classList.remove('active');
+      requestWakeLock();
     }
   });
 
-  remainingResetBtn.addEventListener('click', () => {
-    remainingActive = false;
-    remainingInitialM = 0;
-    remainingLeftM = 0;
-    remainingInput.value = '';
-    remainingInput.disabled = false;
-    remainingBtn.textContent = 'Iniciar cuenta atrás';
-    remainingBtn.classList.remove('active');
-    remainingValue.textContent = '—';
-    remainingValue.classList.remove('warn', 'arrived');
-    arrivedMsg.style.display = 'none';
-    progressFill.style.width = '0%';
+  el.startCountdownBtn.addEventListener("click", function () {
+    const meters = parseFloat(el.initialMeters.value);
+    if (!meters || meters <= 0) {
+      alert("Introduce una distancia válida en metros");
+      return;
+    }
+    if (!lastPos) {
+      alert("Esperando señal GPS para fijar el punto de inicio. Inténtalo de nuevo en unos segundos.");
+      return;
+    }
+    countdown.active = true;
+    countdown.paused = false;
+    countdown.initialMeters = meters;
+    countdown.startLat = lastPos.lat;
+    countdown.startLon = lastPos.lon;
+
+    el.setupBlock.style.display = "none";
+    el.activeBlock.style.display = "block";
+    el.remainingValue.classList.remove("done");
+    el.countdownBadge.textContent = "en directo";
+    el.countdownBadge.classList.add("live");
+    updateCountdownUI(0, meters);
+    saveTrip();
   });
 
+  el.pauseCountdownBtn.addEventListener("click", function () {
+    countdown.paused = !countdown.paused;
+    el.pauseCountdownBtn.textContent = countdown.paused ? "Reanudar" : "Pausar";
+    el.countdownBadge.textContent = countdown.paused ? "en pausa" : "en directo";
+    el.countdownBadge.classList.toggle("live", !countdown.paused);
+    saveTrip();
+  });
+
+  el.stopCountdownBtn.addEventListener("click", function () {
+    countdown.active = false;
+    countdown.paused = false;
+    countdown.startLat = null;
+    countdown.startLon = null;
+    el.initialMeters.value = "";
+    el.pauseCountdownBtn.textContent = "Pausar";
+    el.setupBlock.style.display = "block";
+    el.activeBlock.style.display = "none";
+    el.countdownBadge.textContent = "inactivo";
+    el.countdownBadge.classList.remove("live");
+    el.remainingValue.classList.remove("done");
+    saveTrip();
+  });
+
+  // ---------- Arranque ----------
+  loadTrip();
+  startWatch();
 })();
 </script>
 </body>
