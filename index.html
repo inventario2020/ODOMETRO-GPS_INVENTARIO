@@ -79,18 +79,32 @@
   .btn-row { display: flex; gap: 10px; margin-top: 10px; }
   .btn-row button { flex: 1; }
 
-  input[type="number"] {
+  input[type="number"], input[type="text"] {
     width: 100%; background: var(--panel2); border: 1px solid var(--border); color: var(--text);
     font-size: 18px; padding: 14px; border-radius: 10px; font-variant-numeric: tabular-nums;
     margin-bottom: 10px; text-align: center;
   }
-  input[type="number"]:focus { outline: none; border-color: var(--accent); }
+  input[type="number"]:focus, input[type="text"]:focus { outline: none; border-color: var(--accent); }
 
   .progress-wrap { background: var(--panel2); border-radius: 10px; height: 14px; overflow: hidden; margin: 10px 0; }
   .progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s ease; }
 
   .remaining-value { text-align: center; font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 8px 0; }
   .remaining-value.done { color: var(--accent); }
+
+  .point-item {
+    background: var(--panel2); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  }
+  .point-info { flex: 1; min-width: 0; }
+  .point-label { font-weight: 700; font-size: 14px; }
+  .point-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .point-distance { font-weight: 800; font-size: 16px; color: #40c4ff; white-space: nowrap; }
+  .point-delete {
+    background: none; border: none; color: var(--warn); font-size: 20px; padding: 4px 8px;
+    width: auto; cursor: pointer; line-height: 1;
+  }
+  .points-empty { text-align: center; color: var(--text-dim); font-size: 13px; padding: 10px 0; }
 
   .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); margin: 4px 0 10px; }
 
@@ -104,7 +118,7 @@
   <h1>Odómetro GPS</h1>
   <div id="status" class="status">Esperando señal GPS…</div>
   <div class="info-bar">
-    <span id="compassInfo">🧭 --°</span>
+    <span id="compassInfo">🧭 <span id="compassNeedle" style="display:inline-block; transition: transform 0.2s ease;">↑</span> <span id="compassText">toca para activar</span></span>
     <span id="tempInfo">🌡️ -- °C</span>
   </div>
   <button class="btn-secondary" id="wakeLockBtn" style="margin-bottom:12px;">🔆 Mantener pantalla encendida: OFF</button>
@@ -144,6 +158,7 @@
     <div class="utm-row"><span class="utm-label">Northing (Y)</span><span class="utm-value" id="utmNorthing">--</span></div>
     <div class="utm-row"><span class="utm-label">Lat / Lon</span><span class="utm-value" id="latLon" style="font-size:12px;">--</span></div>
     <div class="utm-row"><span class="utm-label">Precisión</span><span class="precision-value" id="accuracyTag">--</span></div>
+    <button class="btn-secondary" id="copyCoordsBtn" style="margin-top:10px;">📋 Copiar coordenadas</button>
   </div>
 
   <div class="card" style="text-align:center;">
@@ -169,6 +184,16 @@
         <button class="btn-danger" id="stopCountdownBtn">Detener</button>
       </div>
     </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">📌 Puntos guardados</div>
+    <input type="text" id="pointLabelInput" placeholder="Etiqueta (opcional)">
+    <div class="btn-row">
+      <button class="btn-primary" id="markPointBtn">Marcar posición actual</button>
+      <button class="btn-secondary" id="exportPointsBtn">Exportar CSV</button>
+    </div>
+    <div id="pointsList" style="margin-top:10px;"></div>
   </div>
 </div>
 
@@ -203,6 +228,9 @@
   let lastTempFetchTime = 0;
   const TEMP_FETCH_INTERVAL_MS = 10 * 60 * 1000; // no consultar más de una vez cada 10 min
   let compassStarted = false;
+
+  // ---------- Puntos guardados ----------
+  let savedPoints = []; // { id, label, lat, lon, utmZone, utmEasting, utmNorthing, t }
 
   // ---------- Podómetro (acelerómetro): distancia metro a metro sin depender del GPS ----------
   let pedoActive = false;
@@ -311,7 +339,8 @@
     heading = ((heading % 360) + 360) % 360;
 
     const dirIndex = Math.round(heading / 45) % 8;
-    el.compassInfo.textContent = "🧭 " + Math.round(heading) + "° " + COMPASS_DIRS[dirIndex];
+    el.compassNeedle.style.transform = "rotate(" + heading + "deg)";
+    el.compassText.textContent = Math.round(heading) + "° " + COMPASS_DIRS[dirIndex];
   }
 
   async function startCompass() {
@@ -346,6 +375,141 @@
       .catch(function () {
         el.tempInfo.textContent = "🌡️ sin conexión";
       });
+  }
+
+  // ---------- Puntos guardados ----------
+  function markPoint() {
+    if (!lastPos) {
+      alert("Esperando señal GPS para marcar el punto. Inténtalo de nuevo en unos segundos.");
+      return;
+    }
+    const utm = latLonToUTM(lastPos.lat, lastPos.lon);
+    const labelInput = document.getElementById("pointLabelInput");
+    const label = labelInput.value.trim() || ("Punto " + (savedPoints.length + 1));
+
+    savedPoints.push({
+      id: Date.now(),
+      label: label,
+      lat: lastPos.lat,
+      lon: lastPos.lon,
+      utmZone: utm.zone,
+      utmEasting: Math.round(utm.easting),
+      utmNorthing: Math.round(utm.northing),
+      t: Date.now()
+    });
+
+    labelInput.value = "";
+    renderPointsList();
+    saveTrip();
+    vibrate(80);
+  }
+
+  function deletePoint(id) {
+    savedPoints = savedPoints.filter(function (p) { return p.id !== id; });
+    renderPointsList();
+    saveTrip();
+  }
+
+  function renderPointsList() {
+    if (savedPoints.length === 0) {
+      el.pointsList.innerHTML = '<div class="points-empty">Todavía no has marcado ningún punto</div>';
+      return;
+    }
+
+    let html = "";
+    for (let i = 0; i < savedPoints.length; i++) {
+      const p = savedPoints[i];
+      let distText = "-- m";
+      if (lastPos) {
+        const d = haversineMeters(p.lat, p.lon, lastPos.lat, lastPos.lon);
+        distText = formatMeters(d);
+      }
+      const time = new Date(p.t).toLocaleTimeString();
+      html +=
+        '<div class="point-item">' +
+          '<div class="point-info">' +
+            '<div class="point-label">' + escapeHtml(p.label) + '</div>' +
+            '<div class="point-meta">' + p.utmZone + " " + p.utmEasting + "E " + p.utmNorthing + "N · " + time + '</div>' +
+          '</div>' +
+          '<div class="point-distance">' + distText + '</div>' +
+          '<button class="point-delete" data-id="' + p.id + '">✕</button>' +
+        '</div>';
+    }
+    el.pointsList.innerHTML = html;
+  }
+
+  function escapeHtml(str) {
+    const d = document.createElement("div");
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function exportPointsCSV() {
+    if (savedPoints.length === 0) {
+      alert("No hay puntos guardados para exportar.");
+      return;
+    }
+    let csv = "Etiqueta,Latitud,Longitud,Zona UTM,Easting,Northing,Fecha\n";
+    savedPoints.forEach(function (p) {
+      const row = [
+        '"' + p.label.replace(/"/g, '""') + '"',
+        p.lat.toFixed(6),
+        p.lon.toFixed(6),
+        p.utmZone,
+        p.utmEasting,
+        p.utmNorthing,
+        new Date(p.t).toLocaleString()
+      ];
+      csv += row.join(",") + "\n";
+    });
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "puntos_odometro.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function copyCoords() {
+    if (!lastPos) {
+      alert("Esperando señal GPS.");
+      return;
+    }
+    const utm = latLonToUTM(lastPos.lat, lastPos.lon);
+    const text = utm.zone + " " + Math.round(utm.easting) + "E " + Math.round(utm.northing) + "N  (" +
+      lastPos.lat.toFixed(6) + ", " + lastPos.lon.toFixed(6) + ")";
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        flashCopyFeedback();
+      }).catch(function () {
+        fallbackCopy(text);
+      });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  function fallbackCopy(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); flashCopyFeedback(); } catch (e) { /* no soportado */ }
+    document.body.removeChild(ta);
+  }
+
+  function flashCopyFeedback() {
+    const btn = document.getElementById("copyCoordsBtn");
+    const original = btn.textContent;
+    btn.textContent = "✅ Copiado";
+    setTimeout(function () { btn.textContent = original; }, 1500);
   }
 
   // ---------- Wake Lock (pantalla encendida) ----------
@@ -397,6 +561,7 @@
         pedoSteps: pedoSteps,
         pedoDistanceM: pedoDistanceM,
         strideLength: parseFloat(document.getElementById("strideLength").value) || 1,
+        savedPoints: savedPoints,
         countdown: countdown.active ? {
           active: true,
           paused: countdown.paused,
@@ -434,6 +599,9 @@
       el.pedoSteps.textContent = pedoSteps;
       el.pedoDistance.textContent = formatMeters(pedoDistanceM);
       if (data.strideLength) document.getElementById("strideLength").value = data.strideLength;
+
+      savedPoints = Array.isArray(data.savedPoints) ? data.savedPoints : [];
+      renderPointsList();
 
       if (data.countdown && data.countdown.active) {
         countdown.active = true;
@@ -558,7 +726,10 @@
     pedoResetBtn: document.getElementById("pedoResetBtn"),
     pedoBadge: document.getElementById("pedoBadge"),
     compassInfo: document.getElementById("compassInfo"),
-    tempInfo: document.getElementById("tempInfo")
+    compassNeedle: document.getElementById("compassNeedle"),
+    compassText: document.getElementById("compassText"),
+    tempInfo: document.getElementById("tempInfo"),
+    pointsList: document.getElementById("pointsList")
   };
 
   function setStatus(msg, type) {
@@ -632,6 +803,8 @@
     lastPos = { lat: latitude, lon: longitude, t: now };
     setStatus("Señal GPS activa", "ok");
     scheduleSave();
+
+    if (savedPoints.length > 0) renderPointsList();
 
     // Temperatura: solo se consulta cada cierto tiempo para no abusar del servicio online
     if (now - lastTempFetchTime > TEMP_FETCH_INTERVAL_MS) {
@@ -768,16 +941,27 @@
   // arranca sola sin necesidad de tocar nada.
   el.compassInfo.addEventListener("click", startCompass);
 
+  document.getElementById("markPointBtn").addEventListener("click", markPoint);
+  document.getElementById("exportPointsBtn").addEventListener("click", exportPointsCSV);
+  document.getElementById("copyCoordsBtn").addEventListener("click", copyCoords);
+
+  // Delegación de eventos: un solo listener para todos los botones "✕" de la lista,
+  // ya que los puntos se crean y destruyen dinámicamente.
+  el.pointsList.addEventListener("click", function (e) {
+    const btn = e.target.closest(".point-delete");
+    if (btn) deletePoint(Number(btn.dataset.id));
+  });
+
   // ---------- Arranque ----------
+  renderPointsList();
   loadTrip();
   startWatch();
   // Intento silencioso de arrancar la brújula (funciona directo en Android;
-  // en iOS no hará nada hasta que el usuario toque el icono, por el permiso)
+  // en iOS no hará nada hasta que el usuario toque el icono, por el permiso).
+  // El texto "toca para activar" ya viene en el HTML por defecto.
   if (!(typeof DeviceOrientationEvent !== "undefined" &&
         typeof DeviceOrientationEvent.requestPermission === "function")) {
     startCompass();
-  } else {
-    el.compassInfo.textContent = "🧭 toca para activar";
   }
 })();
 </script>
