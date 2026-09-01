@@ -44,13 +44,15 @@
   .speed-card { text-align: center; padding: 22px 16px; }
   .speed-value { font-size: 64px; font-weight: 800; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
   .speed-unit { font-size: 16px; color: var(--text-dim); margin-top: 4px; letter-spacing: 2px; }
-  .accuracy-tag { font-size: 11px; color: var(--text-dim); margin-top: 8px; }
-  .accuracy-tag.bad { color: var(--warn); }
+  .precision-value { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 14px; color: #40c4ff; }
+  .precision-value.bad { color: #ffab40; }
 
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat-box { background: var(--panel2); border-radius: 12px; padding: 10px 8px; text-align: center; }
   .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
   .value { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .value.small { font-size: 15px; }
+  .accent-purple { color: #b388ff; }
 
   .utm-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
   .utm-row:last-child { border-bottom: none; }
@@ -87,6 +89,7 @@
 
   .badge { display: inline-block; font-size: 11px; padding: 3px 8px; border-radius: 20px; background: var(--panel2); color: var(--text-dim); margin-left: 6px; }
   .badge.live { background: rgba(0,230,118,0.15); color: var(--accent); }
+  .badge.live-purple { background: rgba(179,136,255,0.15); color: #b388ff; }
 </style>
 </head>
 <body>
@@ -96,7 +99,7 @@
   <button class="btn-secondary" id="wakeLockBtn" style="margin-bottom:12px;">🔆 Mantener pantalla encendida: OFF</button>
 
   <div class="card speed-card">
-    <div class="section-title" style="text-align:center;">Distancia total recorrida</div>
+    <div class="section-title" style="text-align:center;">📏 Distancia Viajada</div>
     <div class="value" id="totalDistance" style="font-size:64px; font-weight:800; color:#40c4ff; text-align:center;">0 m</div>
     <div class="btn-row">
       <button class="btn-secondary" id="resetTotalBtn">Reiniciar total</button>
@@ -104,22 +107,42 @@
   </div>
 
   <div class="card">
-    <div class="section-title">Coordenadas UTM</div>
+    <div class="section-title">🚶 Desplazamiento <span class="badge" id="pedoBadge">inactivo</span></div>
+    <div class="grid2" style="margin-bottom:12px;">
+      <div class="stat-box">
+        <div class="label">Pasos</div>
+        <div class="value accent-purple" id="pedoSteps">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Distancia</div>
+        <div class="value accent-purple" id="pedoDistance">0 m</div>
+      </div>
+    </div>
+    <div class="label">Longitud de zancada (m)</div>
+    <input type="number" id="strideLength" value="1" step="0.01" min="0.3" max="1.5" inputmode="decimal">
+    <div class="btn-row">
+      <button class="btn-primary" id="pedoToggleBtn">Activar podómetro</button>
+      <button class="btn-secondary" id="pedoResetBtn">Reiniciar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">🛰️ Coordenadas UTM</div>
     <div class="utm-row"><span class="utm-label">Zona</span><span class="utm-value" id="utmZone">--</span></div>
     <div class="utm-row"><span class="utm-label">Easting (X)</span><span class="utm-value" id="utmEasting">--</span></div>
     <div class="utm-row"><span class="utm-label">Northing (Y)</span><span class="utm-value" id="utmNorthing">--</span></div>
     <div class="utm-row"><span class="utm-label">Lat / Lon</span><span class="utm-value" id="latLon" style="font-size:12px;">--</span></div>
+    <div class="utm-row"><span class="utm-label">Precisión</span><span class="precision-value" id="accuracyTag">--</span></div>
   </div>
 
   <div class="card" style="text-align:center;">
-    <div class="label" style="text-align:center;">Velocidad</div>
+    <div class="label" style="text-align:center;">⚡ Velocidad</div>
     <div class="speed-value" id="speedValue" style="font-size:44px;">0.0</div>
     <div class="speed-unit">KM/H</div>
-    <div class="accuracy-tag" id="accuracyTag">precisión: --</div>
   </div>
 
   <div class="card">
-    <div class="section-title">Distancia restante <span class="badge" id="countdownBadge">inactivo</span></div>
+    <div class="section-title">🎯 Distancia restante <span class="badge" id="countdownBadge">inactivo</span></div>
     <div id="setupBlock">
       <input type="number" id="initialMeters" placeholder="Metros a recorrer" inputmode="numeric">
       <button class="btn-primary" id="startCountdownBtn">Iniciar cuenta atrás</button>
@@ -138,13 +161,15 @@
   </div>
 </div>
 
+
 <script>
 (function () {
   "use strict";
 
   // ---------- Estado global ----------
   let lastPos = null;          // última posición válida {lat, lon, t, speed}
-  let totalDistanceM = 0;      // distancia total acumulada (Haversine tramo a tramo)
+  let totalDistanceM = 0;      // distancia total acumulada, en incrementos de metro entero
+  let distanceAnchor = null;   // punto de referencia {lat, lon} para filtrar el ruido/drift del GPS en parado
   let watchId = null;
 
   // Countdown ("Distancia restante"): mide la distancia en línea recta
@@ -161,6 +186,19 @@
 
   const MAX_PLAUSIBLE_SPEED_MS = 60; // ~216 km/h, filtro de saltos absurdos
   const MIN_ACCURACY_FOR_DISTANCE = 30; // metros; por encima de esto no sumamos a la distancia
+  const MIN_MOVEMENT_M = 5; // umbral mínimo de desplazamiento real; por debajo se considera ruido del GPS en parado
+
+  // ---------- Podómetro (acelerómetro): distancia metro a metro sin depender del GPS ----------
+  let pedoActive = false;
+  let pedoSteps = 0;
+  let pedoDistanceM = 0;
+  let pedoFilteredMag = null;   // magnitud de aceleración suavizada (línea base ~gravedad)
+  let pedoOverThreshold = false;
+  let pedoLastStepTime = 0;
+  const PEDO_STEP_THRESHOLD = 1.6;   // aceleración dinámica (m/s²) por encima de la línea base para contar un paso
+  const PEDO_RESET_THRESHOLD = 0.8;  // umbral de histéresis para permitir el siguiente paso
+  const PEDO_MIN_INTERVAL_MS = 300;  // intervalo mínimo entre pasos (evita dobles conteos)
+  const PEDO_FILTER_ALPHA = 0.15;    // suavizado exponencial de la línea base
 
   let wakeLock = null;
   const STORAGE_KEY = "odometro_gps_trayecto_v1";
@@ -171,6 +209,76 @@
     if ("vibrate" in navigator) {
       try { navigator.vibrate(pattern); } catch (e) { /* no soportado */ }
     }
+  }
+
+  // ---------- Podómetro ----------
+  function handleMotion(event) {
+    const g = event.accelerationIncludingGravity;
+    if (!g || g.x == null || g.y == null || g.z == null) return;
+
+    const mag = Math.sqrt(g.x * g.x + g.y * g.y + g.z * g.z);
+
+    // Línea base suavizada (aprox. la gravedad + tu ritmo de movimiento general)
+    if (pedoFilteredMag == null) pedoFilteredMag = mag;
+    pedoFilteredMag = PEDO_FILTER_ALPHA * mag + (1 - PEDO_FILTER_ALPHA) * pedoFilteredMag;
+
+    const dynamic = mag - pedoFilteredMag; // componente de movimiento "puro", sin la gravedad de fondo
+    const now = Date.now();
+
+    if (!pedoOverThreshold && dynamic > PEDO_STEP_THRESHOLD &&
+        (now - pedoLastStepTime) > PEDO_MIN_INTERVAL_MS) {
+      pedoOverThreshold = true;
+      pedoLastStepTime = now;
+      registerStep();
+    } else if (dynamic < PEDO_RESET_THRESHOLD) {
+      pedoOverThreshold = false;
+    }
+  }
+
+  function registerStep() {
+    pedoSteps++;
+    const stride = parseFloat(document.getElementById("strideLength").value) || 1;
+    pedoDistanceM += stride;
+    el.pedoSteps.textContent = pedoSteps;
+    el.pedoDistance.textContent = formatMeters(pedoDistanceM);
+    scheduleSave();
+  }
+
+  async function startPedometer() {
+    // iOS 13+ exige permiso explícito para acceder al acelerómetro
+    if (typeof DeviceMotionEvent !== "undefined" &&
+        typeof DeviceMotionEvent.requestPermission === "function") {
+      try {
+        const perm = await DeviceMotionEvent.requestPermission();
+        if (perm !== "granted") {
+          alert("Necesitas conceder permiso de movimiento/acelerómetro para usar el podómetro.");
+          return;
+        }
+      } catch (err) {
+        alert("No se pudo solicitar el permiso de movimiento: " + err.message);
+        return;
+      }
+    } else if (!("DeviceMotionEvent" in window)) {
+      alert("Este dispositivo/navegador no soporta el acelerómetro (DeviceMotionEvent).");
+      return;
+    }
+
+    pedoActive = true;
+    pedoFilteredMag = null;
+    pedoOverThreshold = false;
+    window.addEventListener("devicemotion", handleMotion);
+    el.pedoToggleBtn.textContent = "Detener podómetro";
+    el.pedoBadge.textContent = "en directo";
+    el.pedoBadge.classList.add("live-purple");
+  }
+
+  function stopPedometer() {
+    pedoActive = false;
+    window.removeEventListener("devicemotion", handleMotion);
+    el.pedoToggleBtn.textContent = "Activar podómetro";
+    el.pedoBadge.textContent = "inactivo";
+    el.pedoBadge.classList.remove("live-purple");
+    saveTrip();
   }
 
   // ---------- Wake Lock (pantalla encendida) ----------
@@ -219,6 +327,9 @@
     try {
       const data = {
         totalDistanceM: totalDistanceM,
+        pedoSteps: pedoSteps,
+        pedoDistanceM: pedoDistanceM,
+        strideLength: parseFloat(document.getElementById("strideLength").value) || 1,
         countdown: countdown.active ? {
           active: true,
           paused: countdown.paused,
@@ -250,6 +361,12 @@
 
       totalDistanceM = data.totalDistanceM || 0;
       el.totalDistance.textContent = formatMeters(totalDistanceM);
+
+      pedoSteps = data.pedoSteps || 0;
+      pedoDistanceM = data.pedoDistanceM || 0;
+      el.pedoSteps.textContent = pedoSteps;
+      el.pedoDistance.textContent = formatMeters(pedoDistanceM);
+      if (data.strideLength) document.getElementById("strideLength").value = data.strideLength;
 
       if (data.countdown && data.countdown.active) {
         countdown.active = true;
@@ -367,7 +484,12 @@
     walkedSinceStart: document.getElementById("walkedSinceStart"),
     pauseCountdownBtn: document.getElementById("pauseCountdownBtn"),
     stopCountdownBtn: document.getElementById("stopCountdownBtn"),
-    countdownBadge: document.getElementById("countdownBadge")
+    countdownBadge: document.getElementById("countdownBadge"),
+    pedoSteps: document.getElementById("pedoSteps"),
+    pedoDistance: document.getElementById("pedoDistance"),
+    pedoToggleBtn: document.getElementById("pedoToggleBtn"),
+    pedoResetBtn: document.getElementById("pedoResetBtn"),
+    pedoBadge: document.getElementById("pedoBadge")
   };
 
   function setStatus(msg, type) {
@@ -386,10 +508,10 @@
     el.utmNorthing.textContent = Math.round(utm.northing) + " m";
     el.latLon.textContent = latitude.toFixed(6) + ", " + longitude.toFixed(6);
 
-    // Precisión
+    // Precisión (ubicada junto a las coordenadas UTM)
     if (accuracy != null) {
-      el.accuracyTag.textContent = "precisión: ±" + Math.round(accuracy) + " m";
-      el.accuracyTag.className = "accuracy-tag" + (accuracy > MIN_ACCURACY_FOR_DISTANCE ? " bad" : "");
+      el.accuracyTag.textContent = "±" + Math.round(accuracy) + " m";
+      el.accuracyTag.className = "precision-value" + (accuracy > MIN_ACCURACY_FOR_DISTANCE ? " bad" : "");
     }
 
     // Velocidad: usa GPS si está disponible y es plausible, si no calcula por Haversine/tiempo
@@ -411,15 +533,21 @@
     if (speedKmh < 1.0) speedKmh = 0;
     el.speedValue.textContent = speedKmh.toFixed(1);
 
-    // Distancia recorrida en este tramo (solo si la precisión es razonable
-    // y el salto es plausible, para descartar rebotes de señal)
-    if (lastPos && (accuracy == null || accuracy <= MIN_ACCURACY_FOR_DISTANCE)) {
-      const dt = (now - lastPos.t) / 1000;
-      const d = haversineMeters(lastPos.lat, lastPos.lon, latitude, longitude);
-      const impliedSpeed = dt > 0 ? d / dt : 0;
-      if (impliedSpeed <= MAX_PLAUSIBLE_SPEED_MS && d < 500) {
-        // Distancia total: siempre suma, sin importar la dirección
-        totalDistanceM += d;
+    // Distancia total: se compara contra un "punto ancla" en vez de la última
+    // lectura cruda. Solo se suma cuando el desplazamiento supera el margen
+    // de error del GPS (su precisión reportada) — así el ruido/drift de los
+    // satélites en parado no se cuenta como movimiento. Cuando sí hay
+    // movimiento real, se suma en metros enteros y el ancla se reubica.
+    if (accuracy == null || accuracy <= MIN_ACCURACY_FOR_DISTANCE) {
+      if (distanceAnchor == null) {
+        distanceAnchor = { lat: latitude, lon: longitude };
+      } else {
+        const dAnchor = haversineMeters(distanceAnchor.lat, distanceAnchor.lon, latitude, longitude);
+        const threshold = Math.max(accuracy || MIN_MOVEMENT_M, MIN_MOVEMENT_M);
+        if (dAnchor >= threshold && dAnchor < 500) {
+          totalDistanceM += Math.round(dAnchor);
+          distanceAnchor = { lat: latitude, lon: longitude };
+        }
       }
     }
     el.totalDistance.textContent = formatMeters(totalDistanceM);
@@ -484,6 +612,7 @@
   // ---------- Botones ----------
   el.resetTotalBtn.addEventListener("click", function () {
     totalDistanceM = 0;
+    distanceAnchor = lastPos ? { lat: lastPos.lat, lon: lastPos.lon } : null;
     el.totalDistance.textContent = "0 m";
     saveTrip();
   });
@@ -494,6 +623,22 @@
     } else {
       requestWakeLock();
     }
+  });
+
+  el.pedoToggleBtn.addEventListener("click", function () {
+    if (pedoActive) {
+      stopPedometer();
+    } else {
+      startPedometer();
+    }
+  });
+
+  el.pedoResetBtn.addEventListener("click", function () {
+    pedoSteps = 0;
+    pedoDistanceM = 0;
+    el.pedoSteps.textContent = "0";
+    el.pedoDistance.textContent = "0 m";
+    saveTrip();
   });
 
   el.startCountdownBtn.addEventListener("click", function () {
