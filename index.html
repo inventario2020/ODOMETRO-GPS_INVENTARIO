@@ -96,9 +96,11 @@
   <button class="btn-secondary" id="wakeLockBtn" style="margin-bottom:12px;">🔆 Mantener pantalla encendida: OFF</button>
 
   <div class="card speed-card">
-    <div class="speed-value" id="speedValue">0.0</div>
-    <div class="speed-unit">KM/H</div>
-    <div class="accuracy-tag" id="accuracyTag">precisión: --</div>
+    <div class="section-title" style="text-align:center;">Distancia total recorrida</div>
+    <div class="value" id="totalDistance" style="font-size:64px; font-weight:800; color:#40c4ff; text-align:center;">0 m</div>
+    <div class="btn-row">
+      <button class="btn-secondary" id="resetTotalBtn">Reiniciar total</button>
+    </div>
   </div>
 
   <div class="card">
@@ -109,21 +111,11 @@
     <div class="utm-row"><span class="utm-label">Lat / Lon</span><span class="utm-value" id="latLon" style="font-size:12px;">--</span></div>
   </div>
 
-  <div class="card">
-    <div class="section-title">Distancia total recorrida</div>
-    <div class="grid2">
-      <div>
-        <div class="label">Distancia</div>
-        <div class="value" id="totalDistance">0 m</div>
-      </div>
-      <div>
-        <div class="label">Vel. media</div>
-        <div class="value small" id="avgSpeed">0.0 km/h</div>
-      </div>
-    </div>
-    <div class="btn-row">
-      <button class="btn-secondary" id="resetTotalBtn">Reiniciar total</button>
-    </div>
+  <div class="card" style="text-align:center;">
+    <div class="label" style="text-align:center;">Velocidad</div>
+    <div class="speed-value" id="speedValue" style="font-size:44px;">0.0</div>
+    <div class="speed-unit">KM/H</div>
+    <div class="accuracy-tag" id="accuracyTag">precisión: --</div>
   </div>
 
   <div class="card">
@@ -136,7 +128,7 @@
       <div class="remaining-value" id="remainingValue">0 m</div>
       <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
       <div style="text-align:center; font-size:12px; color:var(--text-dim); margin-bottom:6px;">
-        Recorrido desde el inicio: <span id="walkedSinceStart">0 m</span>
+        Distancia desde el punto de inicio: <span id="walkedSinceStart">0 m</span>
       </div>
       <div class="btn-row">
         <button class="btn-secondary" id="pauseCountdownBtn">Pausar</button>
@@ -153,10 +145,12 @@
   // ---------- Estado global ----------
   let lastPos = null;          // última posición válida {lat, lon, t, speed}
   let totalDistanceM = 0;      // distancia total acumulada (Haversine tramo a tramo)
-  let totalTimeMovingS = 0;    // tiempo en movimiento (para vel. media)
   let watchId = null;
 
-  // Countdown ("Distancia restante") anclado a una posición de inicio
+  // Countdown ("Distancia restante"): mide la distancia en línea recta
+  // desde el punto donde pulsaste "Iniciar" hasta tu posición actual.
+  // Si avanzas, el restante baja; si retrocedes, el restante SUBE otra vez
+  // (refleja tu posición real respecto al punto de partida, no los pasos dados).
   let countdown = {
     active: false,
     paused: false,
@@ -225,7 +219,6 @@
     try {
       const data = {
         totalDistanceM: totalDistanceM,
-        totalTimeMovingS: totalTimeMovingS,
         countdown: countdown.active ? {
           active: true,
           paused: countdown.paused,
@@ -256,10 +249,7 @@
       if (!data) return;
 
       totalDistanceM = data.totalDistanceM || 0;
-      totalTimeMovingS = data.totalTimeMovingS || 0;
       el.totalDistance.textContent = formatMeters(totalDistanceM);
-      const avgKmh = totalTimeMovingS > 0 ? (totalDistanceM / totalTimeMovingS) * 3.6 : 0;
-      el.avgSpeed.textContent = avgKmh.toFixed(1) + " km/h";
 
       if (data.countdown && data.countdown.active) {
         countdown.active = true;
@@ -367,7 +357,6 @@
     utmNorthing: document.getElementById("utmNorthing"),
     latLon: document.getElementById("latLon"),
     totalDistance: document.getElementById("totalDistance"),
-    avgSpeed: document.getElementById("avgSpeed"),
     resetTotalBtn: document.getElementById("resetTotalBtn"),
     setupBlock: document.getElementById("setupBlock"),
     activeBlock: document.getElementById("activeBlock"),
@@ -422,23 +411,21 @@
     if (speedKmh < 1.0) speedKmh = 0;
     el.speedValue.textContent = speedKmh.toFixed(1);
 
-    // Distancia total acumulada (solo si la precisión es razonable)
+    // Distancia recorrida en este tramo (solo si la precisión es razonable
+    // y el salto es plausible, para descartar rebotes de señal)
     if (lastPos && (accuracy == null || accuracy <= MIN_ACCURACY_FOR_DISTANCE)) {
       const dt = (now - lastPos.t) / 1000;
       const d = haversineMeters(lastPos.lat, lastPos.lon, latitude, longitude);
       const impliedSpeed = dt > 0 ? d / dt : 0;
-      // Descarta saltos de posición implausibles (rebotes de señal)
       if (impliedSpeed <= MAX_PLAUSIBLE_SPEED_MS && d < 500) {
+        // Distancia total: siempre suma, sin importar la dirección
         totalDistanceM += d;
-        if (speedKmh > 0) totalTimeMovingS += dt;
       }
     }
     el.totalDistance.textContent = formatMeters(totalDistanceM);
-    const avgKmh = totalTimeMovingS > 0 ? (totalDistanceM / totalTimeMovingS) * 3.6 : 0;
-    el.avgSpeed.textContent = avgKmh.toFixed(1) + " km/h";
 
-    // Distancia restante: anclada a la posición de INICIO del contador,
-    // no a la suma incremental (evita arrastre de error).
+    // Distancia restante: línea recta desde el punto de inicio del contador.
+    // Si retrocedes, esta distancia baja y el restante vuelve a subir.
     if (countdown.active && !countdown.paused && countdown.startLat != null) {
       const walked = haversineMeters(countdown.startLat, countdown.startLon, latitude, longitude);
       const remaining = countdown.initialMeters - walked;
@@ -497,9 +484,7 @@
   // ---------- Botones ----------
   el.resetTotalBtn.addEventListener("click", function () {
     totalDistanceM = 0;
-    totalTimeMovingS = 0;
     el.totalDistance.textContent = "0 m";
-    el.avgSpeed.textContent = "0.0 km/h";
     saveTrip();
   });
 
