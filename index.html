@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Odómetro GPS</title>
+<title>Odómetro GPS Inventario</title>
 <style>
   :root {
     --bg: #0a0a0a;
@@ -27,7 +27,7 @@
   }
   .app { max-width: 480px; margin: 0 auto; padding: 14px 14px 30px; }
 
-  h1 { font-size: 18px; text-align: center; margin: 6px 0 14px; letter-spacing: 1px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; }
+  h1 { font-size: 24px; text-align: center; margin: 6px 0 14px; letter-spacing: 1px; color: #40c4ff; font-weight: 800; text-transform: uppercase; }
 
   .status {
     text-align: center; font-size: 12px; padding: 6px 10px; border-radius: 8px;
@@ -49,7 +49,7 @@
   }
 
   .speed-card { text-align: center; padding: 22px 16px; }
-  .speed-value { font-size: 64px; font-weight: 800; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .speed-value { font-size: 64px; font-weight: 800; line-height: 1; color: #ffab40; font-variant-numeric: tabular-nums; }
   .speed-unit { font-size: 16px; color: var(--text-dim); margin-top: 4px; letter-spacing: 2px; }
   .precision-value { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 14px; color: #40c4ff; }
   .precision-value.bad { color: #ffab40; }
@@ -64,7 +64,7 @@
   .utm-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
   .utm-row:last-child { border-bottom: none; }
   .utm-label { color: var(--text-dim); font-size: 13px; }
-  .utm-value { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 14px; }
+  .utm-value { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 19px; }
 
   button {
     font-family: inherit; border: none; border-radius: 12px; padding: 16px;
@@ -115,7 +115,7 @@
 </head>
 <body>
 <div class="app">
-  <h1>Odómetro GPS</h1>
+  <h1>Odómetro GPS Inventarios</h1>
   <div id="status" class="status">Esperando señal GPS…</div>
   <div class="info-bar">
     <span id="compassInfo">🧭 <span id="compassNeedle" style="display:inline-block; transition: transform 0.2s ease;">↑</span> <span id="compassText">toca para activar</span></span>
@@ -124,15 +124,23 @@
   <button class="btn-secondary" id="wakeLockBtn" style="margin-bottom:12px;">🔆 Mantener pantalla encendida: OFF</button>
 
   <div class="card speed-card">
-    <div class="section-title" style="text-align:center;">📏 Distancia Viajada</div>
+    <div class="section-title" style="text-align:center; font-size:17px;">📏 Distancia Viajada</div>
     <div class="value" id="totalDistance" style="font-size:64px; font-weight:800; color:#40c4ff; text-align:center;">0 m</div>
     <div class="btn-row">
       <button class="btn-secondary" id="resetTotalBtn">Reiniciar total</button>
     </div>
   </div>
 
+  <div class="card speed-card">
+    <div class="section-title" style="text-align:center; font-size:17px;">📏 Distancia Viajada 2</div>
+    <div class="value" id="totalDistance2" style="font-size:64px; font-weight:800; color:#ffd600; text-align:center;">0 m</div>
+    <div class="btn-row">
+      <button class="btn-secondary" id="resetTotal2Btn">Reiniciar total</button>
+    </div>
+  </div>
+
   <div class="card">
-    <div class="section-title">🚶 Desplazamiento <span class="badge" id="pedoBadge">inactivo</span></div>
+    <div class="section-title">🚶 Podómetro <span class="badge" id="pedoBadge">inactivo</span></div>
     <div class="grid2" style="margin-bottom:12px;">
       <div class="stat-box">
         <div class="label">Pasos</div>
@@ -152,48 +160,33 @@
   </div>
 
   <div class="card">
-    <div class="section-title">🛰️ Coordenadas UTM</div>
+    <div class="section-title" style="font-size:17px;">🛰️ Coordenadas UTM</div>
     <div class="utm-row"><span class="utm-label">Zona</span><span class="utm-value" id="utmZone">--</span></div>
     <div class="utm-row"><span class="utm-label">Easting (X)</span><span class="utm-value" id="utmEasting">--</span></div>
     <div class="utm-row"><span class="utm-label">Northing (Y)</span><span class="utm-value" id="utmNorthing">--</span></div>
-    <div class="utm-row"><span class="utm-label">Lat / Lon</span><span class="utm-value" id="latLon" style="font-size:12px;">--</span></div>
+    <div class="utm-row"><span class="utm-label">Lat / Lon</span><span class="utm-value" id="latLon" style="font-size:16px;">--</span></div>
     <div class="utm-row"><span class="utm-label">Precisión</span><span class="precision-value" id="accuracyTag">--</span></div>
     <button class="btn-secondary" id="copyCoordsBtn" style="margin-top:10px;">📋 Copiar coordenadas</button>
   </div>
 
-  <div class="card" style="text-align:center;">
-    <div class="label" style="text-align:center;">⚡ Velocidad</div>
-    <div class="speed-value" id="speedValue" style="font-size:44px;">0.0</div>
-    <div class="speed-unit">KM/H</div>
-  </div>
-
   <div class="card">
-    <div class="section-title">🎯 Distancia restante <span class="badge" id="countdownBadge">inactivo</span></div>
-    <div id="setupBlock">
-      <input type="number" id="initialMeters" placeholder="Metros a recorrer" inputmode="numeric">
-      <button class="btn-primary" id="startCountdownBtn">Iniciar cuenta atrás</button>
-    </div>
-    <div id="activeBlock" style="display:none;">
-      <div class="remaining-value" id="remainingValue">0 m</div>
-      <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
-      <div style="text-align:center; font-size:12px; color:var(--text-dim); margin-bottom:6px;">
-        Distancia desde el punto de inicio: <span id="walkedSinceStart">0 m</span>
-      </div>
-      <div class="btn-row">
-        <button class="btn-secondary" id="pauseCountdownBtn">Pausar</button>
-        <button class="btn-danger" id="stopCountdownBtn">Detener</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="section-title">📌 Puntos guardados</div>
+    <div class="section-title" style="font-size:17px;">📌 Puntos guardados</div>
     <input type="text" id="pointLabelInput" placeholder="Etiqueta (opcional)">
     <div class="btn-row">
       <button class="btn-primary" id="markPointBtn">Marcar posición actual</button>
       <button class="btn-secondary" id="exportPointsBtn">Exportar CSV</button>
     </div>
+    <div class="btn-row">
+      <button class="btn-secondary" id="exportKmlBtn">Exportar KML</button>
+      <button class="btn-secondary" id="exportShpBtn">Exportar SHP</button>
+    </div>
     <div id="pointsList" style="margin-top:10px;"></div>
+  </div>
+
+  <div class="card" style="text-align:center;">
+    <div class="section-title" style="text-align:center; font-size:17px;"><span style="font-size:22px;">🚗</span> Velocidad</div>
+    <div class="speed-value" id="speedValue" style="font-size:44px;">0.0</div>
+    <div class="speed-unit">KM/H</div>
   </div>
 </div>
 
@@ -206,19 +199,9 @@
   let lastPos = null;          // última posición válida {lat, lon, t, speed}
   let totalDistanceM = 0;      // distancia total acumulada, en incrementos de metro entero
   let distanceAnchor = null;   // punto de referencia {lat, lon} para filtrar el ruido/drift del GPS en parado
+  let totalDistanceM2 = 0;     // segundo contador de distancia, totalmente independiente del primero
+  let distanceAnchor2 = null;  // punto de referencia propio del segundo contador
   let watchId = null;
-
-  // Countdown ("Distancia restante"): mide la distancia en línea recta
-  // desde el punto donde pulsaste "Iniciar" hasta tu posición actual.
-  // Si avanzas, el restante baja; si retrocedes, el restante SUBE otra vez
-  // (refleja tu posición real respecto al punto de partida, no los pasos dados).
-  let countdown = {
-    active: false,
-    paused: false,
-    initialMeters: 0,
-    startLat: null,
-    startLon: null
-  };
 
   const MAX_PLAUSIBLE_SPEED_MS = 60; // ~216 km/h, filtro de saltos absurdos
   const MIN_ACCURACY_FOR_DISTANCE = 30; // metros; por encima de esto no sumamos a la distancia
@@ -463,15 +446,206 @@
       csv += row.join(",") + "\n";
     });
 
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    downloadBlob(csv, "text/csv;charset=utf-8;", "puntos_odometro.csv");
+  }
+
+  // ---------- Descarga genérica de un Blob ----------
+  function downloadBlob(content, mimeType, filename) {
+    const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "puntos_odometro.csv";
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+
+  function escapeXml(str) {
+    return String(str)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+  }
+
+  // ---------- Exportar KML ----------
+  function exportPointsKML() {
+    if (savedPoints.length === 0) {
+      alert("No hay puntos guardados para exportar.");
+      return;
+    }
+    let kml =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<kml xmlns="http://www.opengis.net/kml/2.2">\n' +
+      '<Document>\n' +
+      '<name>Puntos Odómetro GPS</name>\n';
+
+    savedPoints.forEach(function (p) {
+      kml +=
+        '<Placemark>\n' +
+        '<name>' + escapeXml(p.label) + '</name>\n' +
+        '<description>' + escapeXml(p.utmZone + " " + p.utmEasting + "E " + p.utmNorthing + "N — " + new Date(p.t).toLocaleString()) + '</description>\n' +
+        '<Point><coordinates>' + p.lon.toFixed(6) + ',' + p.lat.toFixed(6) + ',0</coordinates></Point>\n' +
+        '</Placemark>\n';
+    });
+
+    kml += '</Document>\n</kml>';
+    downloadBlob(kml, "application/vnd.google-earth.kml+xml;charset=utf-8;", "puntos_odometro.kml");
+  }
+
+  // ---------- Exportar Shapefile (SHP/SHX/DBF/PRJ) para ArcGIS ----------
+  // Genera los 4 archivos que componen un shapefile de puntos en WGS84.
+  // IMPORTANTE: los 4 archivos deben guardarse juntos en la misma carpeta
+  // con el mismo nombre base para que ArcGIS/QGIS puedan abrirlos.
+  function buildShpAndShx(points) {
+    const n = points.length;
+    const shpContentBytes = n * (8 + 20); // por punto: 8 bytes cabecera de registro + 20 bytes de contenido
+    const shpBuf = new ArrayBuffer(100 + shpContentBytes);
+    const shpView = new DataView(shpBuf);
+    const shxBuf = new ArrayBuffer(100 + n * 8);
+    const shxView = new DataView(shxBuf);
+
+    let xs = points.map(function (p) { return p.lon; });
+    let ys = points.map(function (p) { return p.lat; });
+    const xmin = Math.min.apply(null, xs), xmax = Math.max.apply(null, xs);
+    const ymin = Math.min.apply(null, ys), ymax = Math.max.apply(null, ys);
+
+    function writeHeader(view, fileLengthWords) {
+      view.setInt32(0, 9994, false);           // File Code
+      for (let i = 4; i <= 20; i += 4) view.setInt32(i, 0, false); // Unused
+      view.setInt32(24, fileLengthWords, false); // File Length (words)
+      view.setInt32(28, 1000, true);            // Version
+      view.setInt32(32, 1, true);               // Shape Type = Point
+      view.setFloat64(36, xmin, true);
+      view.setFloat64(44, ymin, true);
+      view.setFloat64(52, xmax, true);
+      view.setFloat64(60, ymax, true);
+      view.setFloat64(68, 0, true);              // Zmin
+      view.setFloat64(76, 0, true);              // Zmax
+      view.setFloat64(84, 0, true);              // Mmin
+      view.setFloat64(92, 0, true);              // Mmax
+    }
+
+    writeHeader(shpView, (100 + shpContentBytes) / 2);
+    writeHeader(shxView, (100 + n * 8) / 2);
+
+    let shpOffset = 100;
+    let shxOffset = 100;
+    let wordOffset = 50; // 100 bytes = 50 words, primer registro empieza justo tras la cabecera
+
+    for (let i = 0; i < n; i++) {
+      const p = points[i];
+      // --- registro en .shp ---
+      shpView.setInt32(shpOffset, i + 1, false);   // Record Number (1-based)
+      shpView.setInt32(shpOffset + 4, 10, false);  // Content Length en words (20 bytes = 10 words)
+      shpView.setInt32(shpOffset + 8, 1, true);    // Shape Type = Point
+      shpView.setFloat64(shpOffset + 12, p.lon, true); // X
+      shpView.setFloat64(shpOffset + 20, p.lat, true); // Y
+      shpOffset += 28;
+
+      // --- registro en .shx ---
+      shxView.setInt32(shxOffset, wordOffset, false);  // Offset (words)
+      shxView.setInt32(shxOffset + 4, 10, false);       // Content Length (words)
+      shxOffset += 8;
+
+      wordOffset += 14; // 4 words de cabecera de registro + 10 words de contenido
+    }
+
+    return { shp: shpBuf, shx: shxBuf };
+  }
+
+  function buildDbf(points) {
+    // Campos: ID (Numérico), LABEL (Texto), LAT/LON (Numérico), ZONA_UTM (Texto), EASTING/NORTHING (Numérico), FECHA (Texto)
+    const fields = [
+      { name: "ID", type: "N", len: 10, dec: 0 },
+      { name: "LABEL", type: "C", len: 50, dec: 0 },
+      { name: "LAT", type: "N", len: 15, dec: 6 },
+      { name: "LON", type: "N", len: 15, dec: 6 },
+      { name: "ZONA_UTM", type: "C", len: 6, dec: 0 },
+      { name: "EASTING", type: "N", len: 10, dec: 0 },
+      { name: "NORTHING", type: "N", len: 12, dec: 0 },
+      { name: "FECHA", type: "C", len: 20, dec: 0 }
+    ];
+    const recordLength = 1 + fields.reduce(function (s, f) { return s + f.len; }, 0); // +1 flag de borrado
+    const headerLength = 32 + fields.length * 32 + 1;
+    const n = points.length;
+
+    const buf = new ArrayBuffer(headerLength + n * recordLength + 1); // +1 marca de fin de archivo
+    const view = new DataView(buf);
+    const bytes = new Uint8Array(buf);
+
+    const now = new Date();
+    view.setUint8(0, 0x03); // dBase III sin memo
+    view.setUint8(1, now.getFullYear() - 1900);
+    view.setUint8(2, now.getMonth() + 1);
+    view.setUint8(3, now.getDate());
+    view.setInt32(4, n, true);              // número de registros
+    view.setInt16(8, headerLength, true);
+    view.setInt16(10, recordLength, true);
+
+    let pos = 32;
+    fields.forEach(function (f) {
+      for (let i = 0; i < 11; i++) bytes[pos + i] = i < f.name.length ? f.name.charCodeAt(i) : 0;
+      view.setUint8(pos + 11, f.type.charCodeAt(0));
+      view.setUint8(pos + 16, f.len);
+      view.setUint8(pos + 17, f.dec);
+      pos += 32;
+    });
+    bytes[pos] = 0x0d; // terminador de cabecera
+    pos += 1;
+
+    function writeField(str, len) {
+      const s = String(str).slice(0, len);
+      for (let i = 0; i < len; i++) bytes[pos + i] = i < s.length ? s.charCodeAt(i) : 0x20; // relleno con espacios
+      pos += len;
+    }
+    function writeNumField(num, len, dec) {
+      const s = (typeof num === "number" ? num.toFixed(dec) : String(num)).slice(0, len);
+      const padded = " ".repeat(Math.max(0, len - s.length)) + s; // los numéricos van alineados a la derecha
+      for (let i = 0; i < len; i++) bytes[pos + i] = padded.charCodeAt(i);
+      pos += len;
+    }
+
+    points.forEach(function (p, i) {
+      bytes[pos] = 0x20; // no borrado
+      pos += 1;
+      writeNumField(i + 1, 10, 0);
+      writeField(p.label, 50);
+      writeNumField(p.lat, 15, 6);
+      writeNumField(p.lon, 15, 6);
+      writeField(p.utmZone, 6);
+      writeNumField(p.utmEasting, 10, 0);
+      writeNumField(p.utmNorthing, 12, 0);
+      writeField(new Date(p.t).toLocaleString(), 20);
+    });
+
+    bytes[pos] = 0x1a; // fin de archivo
+    return buf;
+  }
+
+  function buildPrjWkt() {
+    return 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],' +
+           'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
+  }
+
+  function exportPointsSHP() {
+    if (savedPoints.length === 0) {
+      alert("No hay puntos guardados para exportar.");
+      return;
+    }
+    const { shp, shx } = buildShpAndShx(savedPoints);
+    const dbf = buildDbf(savedPoints);
+    const prj = buildPrjWkt();
+
+    // Se descargan 4 archivos por separado. Guárdalos todos juntos, en la
+    // misma carpeta y con el mismo nombre base, para que ArcGIS/QGIS
+    // los reconozca como un único shapefile.
+    downloadBlob(shp, "application/octet-stream", "puntos_odometro.shp");
+    downloadBlob(shx, "application/octet-stream", "puntos_odometro.shx");
+    downloadBlob(dbf, "application/octet-stream", "puntos_odometro.dbf");
+    downloadBlob(prj, "text/plain;charset=utf-8;", "puntos_odometro.prj");
+
+    alert("Se han descargado 4 archivos (.shp .shx .dbf .prj). Guárdalos todos en la misma carpeta con el mismo nombre para abrirlos en ArcGIS.");
   }
 
   function copyCoords() {
@@ -558,17 +732,11 @@
     try {
       const data = {
         totalDistanceM: totalDistanceM,
+        totalDistanceM2: totalDistanceM2,
         pedoSteps: pedoSteps,
         pedoDistanceM: pedoDistanceM,
         strideLength: parseFloat(document.getElementById("strideLength").value) || 1,
         savedPoints: savedPoints,
-        countdown: countdown.active ? {
-          active: true,
-          paused: countdown.paused,
-          initialMeters: countdown.initialMeters,
-          startLat: countdown.startLat,
-          startLon: countdown.startLon
-        } : { active: false },
         savedAt: Date.now()
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -594,6 +762,9 @@
       totalDistanceM = data.totalDistanceM || 0;
       el.totalDistance.textContent = formatMeters(totalDistanceM);
 
+      totalDistanceM2 = data.totalDistanceM2 || 0;
+      el.totalDistance2.textContent = formatMeters(totalDistanceM2);
+
       pedoSteps = data.pedoSteps || 0;
       pedoDistanceM = data.pedoDistanceM || 0;
       el.pedoSteps.textContent = pedoSteps;
@@ -602,20 +773,6 @@
 
       savedPoints = Array.isArray(data.savedPoints) ? data.savedPoints : [];
       renderPointsList();
-
-      if (data.countdown && data.countdown.active) {
-        countdown.active = true;
-        countdown.paused = data.countdown.paused;
-        countdown.initialMeters = data.countdown.initialMeters;
-        countdown.startLat = data.countdown.startLat;
-        countdown.startLon = data.countdown.startLon;
-
-        el.setupBlock.style.display = "none";
-        el.activeBlock.style.display = "block";
-        el.countdownBadge.textContent = countdown.paused ? "en pausa" : "en directo";
-        el.countdownBadge.classList.toggle("live", !countdown.paused);
-        el.pauseCountdownBtn.textContent = countdown.paused ? "Reanudar" : "Pausar";
-      }
     } catch (e) { /* datos corruptos o no disponibles */ }
   }
 
@@ -635,6 +792,24 @@
               Math.sin(dLon / 2) ** 2;
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
+  }
+
+  // Actualiza un contador de distancia con el método de "punto ancla":
+  // solo suma cuando el movimiento supera el margen de error del GPS,
+  // evitando que el ruido en parado se cuente como distancia recorrida.
+  function updateAnchoredDistance(anchor, total, lat, lon, accuracy) {
+    if (accuracy != null && accuracy > MIN_ACCURACY_FOR_DISTANCE) {
+      return { anchor: anchor, total: total };
+    }
+    if (anchor == null) {
+      return { anchor: { lat: lat, lon: lon }, total: total };
+    }
+    const dAnchor = haversineMeters(anchor.lat, anchor.lon, lat, lon);
+    const threshold = Math.max(accuracy || MIN_MOVEMENT_M, MIN_MOVEMENT_M);
+    if (dAnchor >= threshold && dAnchor < 500) {
+      return { anchor: { lat: lat, lon: lon }, total: total + Math.round(dAnchor) };
+    }
+    return { anchor: anchor, total: total };
   }
 
   function formatMeters(m) {
@@ -710,16 +885,8 @@
     latLon: document.getElementById("latLon"),
     totalDistance: document.getElementById("totalDistance"),
     resetTotalBtn: document.getElementById("resetTotalBtn"),
-    setupBlock: document.getElementById("setupBlock"),
-    activeBlock: document.getElementById("activeBlock"),
-    initialMeters: document.getElementById("initialMeters"),
-    startCountdownBtn: document.getElementById("startCountdownBtn"),
-    remainingValue: document.getElementById("remainingValue"),
-    progressBar: document.getElementById("progressBar"),
-    walkedSinceStart: document.getElementById("walkedSinceStart"),
-    pauseCountdownBtn: document.getElementById("pauseCountdownBtn"),
-    stopCountdownBtn: document.getElementById("stopCountdownBtn"),
-    countdownBadge: document.getElementById("countdownBadge"),
+    totalDistance2: document.getElementById("totalDistance2"),
+    resetTotal2Btn: document.getElementById("resetTotal2Btn"),
     pedoSteps: document.getElementById("pedoSteps"),
     pedoDistance: document.getElementById("pedoDistance"),
     pedoToggleBtn: document.getElementById("pedoToggleBtn"),
@@ -778,27 +945,17 @@
     // de error del GPS (su precisión reportada) — así el ruido/drift de los
     // satélites en parado no se cuenta como movimiento. Cuando sí hay
     // movimiento real, se suma en metros enteros y el ancla se reubica.
-    if (accuracy == null || accuracy <= MIN_ACCURACY_FOR_DISTANCE) {
-      if (distanceAnchor == null) {
-        distanceAnchor = { lat: latitude, lon: longitude };
-      } else {
-        const dAnchor = haversineMeters(distanceAnchor.lat, distanceAnchor.lon, latitude, longitude);
-        const threshold = Math.max(accuracy || MIN_MOVEMENT_M, MIN_MOVEMENT_M);
-        if (dAnchor >= threshold && dAnchor < 500) {
-          totalDistanceM += Math.round(dAnchor);
-          distanceAnchor = { lat: latitude, lon: longitude };
-        }
-      }
-    }
+    // Distancia Viajada (contador 1)
+    const upd1 = updateAnchoredDistance(distanceAnchor, totalDistanceM, latitude, longitude, accuracy);
+    distanceAnchor = upd1.anchor;
+    totalDistanceM = upd1.total;
     el.totalDistance.textContent = formatMeters(totalDistanceM);
 
-    // Distancia restante: línea recta desde el punto de inicio del contador.
-    // Si retrocedes, esta distancia baja y el restante vuelve a subir.
-    if (countdown.active && !countdown.paused && countdown.startLat != null) {
-      const walked = haversineMeters(countdown.startLat, countdown.startLon, latitude, longitude);
-      const remaining = countdown.initialMeters - walked;
-      updateCountdownUI(walked, remaining);
-    }
+    // Distancia Viajada 2 (contador 2, totalmente independiente)
+    const upd2 = updateAnchoredDistance(distanceAnchor2, totalDistanceM2, latitude, longitude, accuracy);
+    distanceAnchor2 = upd2.anchor;
+    totalDistanceM2 = upd2.total;
+    el.totalDistance2.textContent = formatMeters(totalDistanceM2);
 
     lastPos = { lat: latitude, lon: longitude, t: now };
     setStatus("Señal GPS activa", "ok");
@@ -810,27 +967,6 @@
     if (now - lastTempFetchTime > TEMP_FETCH_INTERVAL_MS) {
       lastTempFetchTime = now;
       fetchTemperature(latitude, longitude);
-    }
-  }
-
-  function updateCountdownUI(walked, remaining) {
-    const clampedRemaining = Math.max(0, remaining);
-    el.walkedSinceStart.textContent = formatMeters(walked);
-    el.remainingValue.textContent = formatMeters(clampedRemaining);
-    const pct = countdown.initialMeters > 0
-      ? Math.min(100, (walked / countdown.initialMeters) * 100)
-      : 0;
-    el.progressBar.style.width = pct + "%";
-
-    if (remaining <= 0) {
-      const yaEstabaCompletado = el.remainingValue.classList.contains("done");
-      el.remainingValue.classList.add("done");
-      el.remainingValue.textContent = "¡Llegaste! 0 m";
-      el.countdownBadge.textContent = "completado";
-      el.countdownBadge.classList.remove("live");
-      if (!yaEstabaCompletado) {
-        vibrate([300, 100, 300, 100, 500]);
-      }
     }
   }
 
@@ -865,6 +1001,13 @@
     saveTrip();
   });
 
+  el.resetTotal2Btn.addEventListener("click", function () {
+    totalDistanceM2 = 0;
+    distanceAnchor2 = lastPos ? { lat: lastPos.lat, lon: lastPos.lon } : null;
+    el.totalDistance2.textContent = "0 m";
+    saveTrip();
+  });
+
   document.getElementById("wakeLockBtn").addEventListener("click", function () {
     if (wakeLock) {
       releaseWakeLock();
@@ -889,60 +1032,14 @@
     saveTrip();
   });
 
-  el.startCountdownBtn.addEventListener("click", function () {
-    const meters = parseFloat(el.initialMeters.value);
-    if (!meters || meters <= 0) {
-      alert("Introduce una distancia válida en metros");
-      return;
-    }
-    if (!lastPos) {
-      alert("Esperando señal GPS para fijar el punto de inicio. Inténtalo de nuevo en unos segundos.");
-      return;
-    }
-    countdown.active = true;
-    countdown.paused = false;
-    countdown.initialMeters = meters;
-    countdown.startLat = lastPos.lat;
-    countdown.startLon = lastPos.lon;
-
-    el.setupBlock.style.display = "none";
-    el.activeBlock.style.display = "block";
-    el.remainingValue.classList.remove("done");
-    el.countdownBadge.textContent = "en directo";
-    el.countdownBadge.classList.add("live");
-    updateCountdownUI(0, meters);
-    saveTrip();
-  });
-
-  el.pauseCountdownBtn.addEventListener("click", function () {
-    countdown.paused = !countdown.paused;
-    el.pauseCountdownBtn.textContent = countdown.paused ? "Reanudar" : "Pausar";
-    el.countdownBadge.textContent = countdown.paused ? "en pausa" : "en directo";
-    el.countdownBadge.classList.toggle("live", !countdown.paused);
-    saveTrip();
-  });
-
-  el.stopCountdownBtn.addEventListener("click", function () {
-    countdown.active = false;
-    countdown.paused = false;
-    countdown.startLat = null;
-    countdown.startLon = null;
-    el.initialMeters.value = "";
-    el.pauseCountdownBtn.textContent = "Pausar";
-    el.setupBlock.style.display = "block";
-    el.activeBlock.style.display = "none";
-    el.countdownBadge.textContent = "inactivo";
-    el.countdownBadge.classList.remove("live");
-    el.remainingValue.classList.remove("done");
-    saveTrip();
-  });
-
   // Toca el icono de la brújula para conceder permiso en iOS; en Android/otros
   // arranca sola sin necesidad de tocar nada.
   el.compassInfo.addEventListener("click", startCompass);
 
   document.getElementById("markPointBtn").addEventListener("click", markPoint);
   document.getElementById("exportPointsBtn").addEventListener("click", exportPointsCSV);
+  document.getElementById("exportKmlBtn").addEventListener("click", exportPointsKML);
+  document.getElementById("exportShpBtn").addEventListener("click", exportPointsSHP);
   document.getElementById("copyCoordsBtn").addEventListener("click", copyCoords);
 
   // Delegación de eventos: un solo listener para todos los botones "✕" de la lista,
