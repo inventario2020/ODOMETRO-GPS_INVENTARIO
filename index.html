@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Odómetro GPS Inventario</title>
+<title>Odómetro GPS COEX</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <style>
   :root {
     --bg: #0a0a0a;
@@ -104,6 +105,10 @@
     background: none; border: none; color: var(--warn); font-size: 20px; padding: 4px 8px;
     width: auto; cursor: pointer; line-height: 1;
   }
+  .point-gmaps {
+    color: #40c4ff; font-size: 19px; padding: 4px 6px; text-decoration: none;
+    line-height: 1; display: inline-block;
+  }
   .points-empty { text-align: center; color: var(--text-dim); font-size: 13px; padding: 10px 0; }
 
   .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); margin: 4px 0 10px; }
@@ -111,31 +116,62 @@
   .badge { display: inline-block; font-size: 11px; padding: 3px 8px; border-radius: 20px; background: var(--panel2); color: var(--text-dim); margin-left: 6px; }
   .badge.live { background: rgba(0,230,118,0.15); color: var(--accent); }
   .badge.live-purple { background: rgba(179,136,255,0.15); color: #b388ff; }
+
+  #batteryIcon.batt-mid { color: #ffab40; }
+  #batteryIcon.batt-low { color: var(--warn); }
+  #batteryIcon.batt-charging { color: var(--accent); }
+
+  /* ---------- Ventana de mapa a pantalla completa ---------- */
+  .map-modal {
+    display: none; position: fixed; inset: 0; background: var(--bg); z-index: 1000;
+    flex-direction: column;
+  }
+  .map-modal.open { display: flex; }
+  .map-modal-header {
+    display: flex; justify-content: space-between; gap: 6px; flex-wrap: wrap;
+    padding: 10px 12px; background: var(--panel); border-bottom: 1px solid var(--border);
+  }
+  .map-modal-header button { width: auto; padding: 10px 10px; font-size: 13px; }
+  #mapContainer { flex: 1; }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel); color: var(--text); }
+  .leaflet-container { background: #1a1a1a; }
 </style>
 </head>
 <body>
 <div class="app">
-  <h1>Odómetro GPS Inventarios</h1>
+  <h1>Odómetro GPS COEX</h1>
   <div id="status" class="status">Esperando señal GPS…</div>
   <div class="info-bar">
     <span id="compassInfo">🧭 <span id="compassNeedle" style="display:inline-block; transition: transform 0.2s ease;">↑</span> <span id="compassText">toca para activar</span></span>
     <span id="tempInfo">🌡️ -- °C</span>
+    <span id="batteryInfo" style="display:none;">
+      <svg id="batteryIcon" width="20" height="11" viewBox="0 0 22 12" style="vertical-align:middle; color: var(--text-dim);">
+        <rect x="1" y="1" width="18" height="10" rx="2.5" ry="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <rect x="19.5" y="4" width="1.5" height="4" rx="0.5" fill="currentColor"/>
+        <rect id="batteryFill" x="2.5" y="2.5" width="15" height="7" rx="1" fill="currentColor"/>
+      </svg>
+      <span id="batteryText">--%</span>
+    </span>
   </div>
   <button class="btn-secondary" id="wakeLockBtn" style="margin-bottom:12px;">🔆 Mantener pantalla encendida: OFF</button>
 
   <div class="card speed-card">
-    <div class="section-title" style="text-align:center; font-size:17px;">📏 Distancia Viajada</div>
+    <div class="section-title" style="text-align:center; font-size:17px;">📏 Distancia Viajada <span class="badge" id="dist1Badge">inactivo</span></div>
     <div class="value" id="totalDistance" style="font-size:64px; font-weight:800; color:#40c4ff; text-align:center;">0 m</div>
+    <div id="dist1PauseNote" style="display:none; text-align:center; font-size:12px; color:var(--warn); margin-top:-4px; margin-bottom:6px;">⚠ En pausa: señal GPS poco precisa</div>
     <div class="btn-row">
-      <button class="btn-secondary" id="resetTotalBtn">Reiniciar total</button>
+      <button class="btn-primary" id="dist1ToggleBtn">Activar</button>
+      <button class="btn-secondary" id="resetTotalBtn">Reiniciar</button>
     </div>
   </div>
 
   <div class="card speed-card">
-    <div class="section-title" style="text-align:center; font-size:17px;">📏 Distancia Viajada 2</div>
+    <div class="section-title" style="text-align:center; font-size:17px;">📏 Distancia Viajada 2 <span class="badge" id="dist2Badge">inactivo</span></div>
     <div class="value" id="totalDistance2" style="font-size:64px; font-weight:800; color:#ffd600; text-align:center;">0 m</div>
+    <div id="dist2PauseNote" style="display:none; text-align:center; font-size:12px; color:var(--warn); margin-top:-4px; margin-bottom:6px;">⚠ En pausa: señal GPS poco precisa</div>
     <div class="btn-row">
-      <button class="btn-secondary" id="resetTotal2Btn">Reiniciar total</button>
+      <button class="btn-primary" id="dist2ToggleBtn">Activar</button>
+      <button class="btn-secondary" id="resetTotal2Btn">Reiniciar</button>
     </div>
   </div>
 
@@ -165,8 +201,12 @@
     <div class="utm-row"><span class="utm-label">Easting (X)</span><span class="utm-value" id="utmEasting">--</span></div>
     <div class="utm-row"><span class="utm-label">Northing (Y)</span><span class="utm-value" id="utmNorthing">--</span></div>
     <div class="utm-row"><span class="utm-label">Lat / Lon</span><span class="utm-value" id="latLon" style="font-size:16px;">--</span></div>
+    <div class="utm-row"><span class="utm-label">Altitud</span><span class="utm-value" id="altitudeValue" style="font-size:16px;">--</span></div>
     <div class="utm-row"><span class="utm-label">Precisión</span><span class="precision-value" id="accuracyTag">--</span></div>
-    <button class="btn-secondary" id="copyCoordsBtn" style="margin-top:10px;">📋 Copiar coordenadas</button>
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="btn-secondary" id="copyCoordsBtn">📋 Copiar coordenadas</button>
+      <button class="btn-secondary" id="gmapsCurrentBtn">🌐 Google Maps</button>
+    </div>
   </div>
 
   <div class="card">
@@ -178,7 +218,7 @@
     </div>
     <div class="btn-row">
       <button class="btn-secondary" id="exportKmlBtn">Exportar KML</button>
-      <button class="btn-secondary" id="exportShpBtn">Exportar SHP</button>
+      <button class="btn-secondary" id="openMapBtn">🗺️ Ver mapa</button>
     </div>
     <div id="pointsList" style="margin-top:10px;"></div>
   </div>
@@ -190,21 +230,32 @@
   </div>
 </div>
 
+<div class="map-modal" id="mapModal">
+  <div class="map-modal-header">
+    <button class="btn-secondary" id="mapLayerToggleBtn">🛰️ Satélite</button>
+    <button class="btn-secondary" id="mapGmapsBtn">🌐 Google Maps</button>
+    <button class="btn-secondary" id="mapCloseBtn">✕ Cerrar</button>
+  </div>
+  <div id="mapContainer"></div>
+</div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 (function () {
   "use strict";
 
   // ---------- Estado global ----------
-  let lastPos = null;          // última posición válida {lat, lon, t, speed}
+  let lastPos = null;          // última posición válida {lat, lon, alt, accuracy, t, speed}
   let totalDistanceM = 0;      // distancia total acumulada, en incrementos de metro entero
-  let distanceAnchor = null;   // punto de referencia {lat, lon} para filtrar el ruido/drift del GPS en parado
+  let distanceAnchor = null;   // punto de referencia {lat, lon, alt, t} para filtrar el ruido/drift del GPS en parado
+  let distanceActive = false;  // el contador 1 solo acumula distancia mientras está activado
   let totalDistanceM2 = 0;     // segundo contador de distancia, totalmente independiente del primero
   let distanceAnchor2 = null;  // punto de referencia propio del segundo contador
+  let distanceActive2 = false; // el contador 2 solo acumula distancia mientras está activado, de forma independiente del contador 1
   let watchId = null;
 
   const MAX_PLAUSIBLE_SPEED_MS = 60; // ~216 km/h, filtro de saltos absurdos
-  const MIN_ACCURACY_FOR_DISTANCE = 30; // metros; por encima de esto no sumamos a la distancia
+  const MIN_ACCURACY_FOR_DISTANCE = 20; // metros; por encima de esto no sumamos a la distancia (ajustado para precisión de kilometraje en carretera)
   const MIN_MOVEMENT_M = 5; // umbral mínimo de desplazamiento real; por debajo se considera ruido del GPS en parado
 
   // ---------- Temperatura (requiere internet, a diferencia del resto de la app) ----------
@@ -360,6 +411,46 @@
       });
   }
 
+  // ---------- Batería del dispositivo ----------
+  // Usa la Battery Status API. No está soportada en Safari/iOS (Apple no la
+  // implementa por privacidad), por lo que en iPhone el indicador
+  // simplemente permanece oculto; en Android/Chrome sí se muestra y se
+  // actualiza en directo.
+  let batteryManager = null;
+  const BATTERY_FILL_MAX_WIDTH = 15; // ancho interior del icono SVG, en px
+
+  function updateBatteryUI() {
+    if (!batteryManager) return;
+    const level = batteryManager.level; // 0..1
+    const pct = Math.round(level * 100);
+    const charging = batteryManager.charging;
+
+    const fillWidth = Math.max(1, Math.round(BATTERY_FILL_MAX_WIDTH * level));
+    el.batteryFill.setAttribute("width", fillWidth);
+
+    el.batteryIcon.classList.remove("batt-mid", "batt-low", "batt-charging");
+    if (charging) {
+      el.batteryIcon.classList.add("batt-charging");
+    } else if (pct <= 20) {
+      el.batteryIcon.classList.add("batt-low");
+    } else if (pct <= 50) {
+      el.batteryIcon.classList.add("batt-mid");
+    }
+
+    el.batteryText.textContent = pct + "%" + (charging ? " ⚡" : "");
+  }
+
+  async function initBattery() {
+    if (!("getBattery" in navigator)) return; // no soportado (p. ej. iPhone/Safari)
+    try {
+      batteryManager = await navigator.getBattery();
+      el.batteryInfo.style.display = "";
+      updateBatteryUI();
+      batteryManager.addEventListener("levelchange", updateBatteryUI);
+      batteryManager.addEventListener("chargingchange", updateBatteryUI);
+    } catch (e) { /* API no disponible en este navegador */ }
+  }
+
   // ---------- Puntos guardados ----------
   function markPoint() {
     if (!lastPos) {
@@ -378,12 +469,15 @@
       utmZone: utm.zone,
       utmEasting: Math.round(utm.easting),
       utmNorthing: Math.round(utm.northing),
+      alt: (lastPos.alt != null && !isNaN(lastPos.alt)) ? Math.round(lastPos.alt) : null,
+      accuracy: (lastPos.accuracy != null && !isNaN(lastPos.accuracy)) ? Math.round(lastPos.accuracy) : null,
       t: Date.now()
     });
 
     labelInput.value = "";
     renderPointsList();
     saveTrip();
+    refreshMapMarkers();
     vibrate(80);
   }
 
@@ -391,6 +485,95 @@
     savedPoints = savedPoints.filter(function (p) { return p.id !== id; });
     renderPointsList();
     saveTrip();
+    refreshMapMarkers();
+  }
+
+  // ---------- Ventana de mapa (Leaflet + OpenStreetMap / Esri satélite) ----------
+  // El mapa solo se crea la primera vez que se abre, para no cargar tiles
+  // ni gastar datos si el usuario nunca pulsa "Ver mapa".
+  let map = null;
+  let mapLayers = {};
+  let currentMapLayer = "street";
+  let mapMarker = null;         // marcador de la posición actual
+  let mapPointMarkers = [];     // marcadores de los puntos guardados
+
+  function initMapIfNeeded() {
+    if (map) return;
+    if (typeof L === "undefined") {
+      alert("No se pudo cargar el mapa. Comprueba que tienes conexión a internet.");
+      return;
+    }
+    map = L.map("mapContainer", { zoomControl: true, attributionControl: true });
+
+    mapLayers.street = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    });
+    mapLayers.satellite = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 19, attribution: "Tiles &copy; Esri" }
+    );
+    mapLayers.street.addTo(map);
+
+    const startLat = lastPos ? lastPos.lat : 40.4168;
+    const startLon = lastPos ? lastPos.lon : -3.7038;
+    map.setView([startLat, startLon], lastPos ? 16 : 5);
+  }
+
+  function toggleMapLayer() {
+    if (!map) return;
+    if (currentMapLayer === "street") {
+      map.removeLayer(mapLayers.street);
+      mapLayers.satellite.addTo(map);
+      currentMapLayer = "satellite";
+      el.mapLayerToggleBtn.textContent = "🗺️ Calles";
+    } else {
+      map.removeLayer(mapLayers.satellite);
+      mapLayers.street.addTo(map);
+      currentMapLayer = "street";
+      el.mapLayerToggleBtn.textContent = "🛰️ Satélite";
+    }
+  }
+
+  function refreshMapMarkers() {
+    if (!map) return;
+
+    // Posición actual
+    if (lastPos) {
+      if (!mapMarker) {
+        mapMarker = L.circleMarker([lastPos.lat, lastPos.lon], {
+          radius: 8, color: "#00e676", fillColor: "#00e676", fillOpacity: 0.9, weight: 2
+        }).addTo(map).bindPopup("Tu posición");
+      } else {
+        mapMarker.setLatLng([lastPos.lat, lastPos.lon]);
+      }
+    }
+
+    // Puntos guardados: se redibujan todos (la lista suele ser pequeña)
+    mapPointMarkers.forEach(function (m) { map.removeLayer(m); });
+    mapPointMarkers = [];
+    savedPoints.forEach(function (p) {
+      const marker = L.marker([p.lat, p.lon]).addTo(map).bindPopup(escapeHtml(p.label));
+      mapPointMarkers.push(marker);
+    });
+  }
+
+  function openMap() {
+    el.mapModal.classList.add("open");
+    // Leaflet necesita recalcular el tamaño del contenedor una vez que deja
+    // de estar oculto (display:none), o el mapa se ve cortado/mal centrado.
+    setTimeout(function () {
+      initMapIfNeeded();
+      if (map) {
+        map.invalidateSize();
+        refreshMapMarkers();
+        if (lastPos) map.setView([lastPos.lat, lastPos.lon], map.getZoom() < 6 ? 16 : map.getZoom());
+      }
+    }, 50);
+  }
+
+  function closeMap() {
+    el.mapModal.classList.remove("open");
   }
 
   function renderPointsList() {
@@ -408,17 +591,35 @@
         distText = formatMeters(d);
       }
       const time = new Date(p.t).toLocaleTimeString();
+      let metaExtra = "";
+      if (p.alt != null) metaExtra += " · Alt " + p.alt + " m";
+      if (p.accuracy != null) metaExtra += " · ±" + p.accuracy + " m";
+      const gmapsUrl = buildGoogleMapsUrl(p.lat, p.lon);
       html +=
         '<div class="point-item">' +
           '<div class="point-info">' +
             '<div class="point-label">' + escapeHtml(p.label) + '</div>' +
-            '<div class="point-meta">' + p.utmZone + " " + p.utmEasting + "E " + p.utmNorthing + "N · " + time + '</div>' +
+            '<div class="point-meta">' + p.utmZone + " " + p.utmEasting + "E " + p.utmNorthing + "N · " + time + escapeHtml(metaExtra) + '</div>' +
           '</div>' +
           '<div class="point-distance">' + distText + '</div>' +
+          '<a class="point-gmaps" href="' + gmapsUrl + '" target="_blank" rel="noopener noreferrer" title="Abrir en Google Maps">🌐</a>' +
           '<button class="point-delete" data-id="' + p.id + '">✕</button>' +
         '</div>';
     }
     el.pointsList.innerHTML = html;
+  }
+
+  // ---------- Enlaces a Google Maps ----------
+  function buildGoogleMapsUrl(lat, lon) {
+    return "https://www.google.com/maps/search/?api=1&query=" + lat.toFixed(6) + "," + lon.toFixed(6);
+  }
+
+  function openCurrentInGoogleMaps() {
+    if (!lastPos) {
+      alert("Esperando señal GPS.");
+      return;
+    }
+    window.open(buildGoogleMapsUrl(lastPos.lat, lastPos.lon), "_blank", "noopener,noreferrer");
   }
 
   function escapeHtml(str) {
@@ -432,7 +633,7 @@
       alert("No hay puntos guardados para exportar.");
       return;
     }
-    let csv = "Etiqueta,Latitud,Longitud,Zona UTM,Easting,Northing,Fecha\n";
+    let csv = "Etiqueta,Latitud,Longitud,Zona UTM,Easting,Northing,Altitud (m),Precision (m),Fecha\n";
     savedPoints.forEach(function (p) {
       const row = [
         '"' + p.label.replace(/"/g, '""') + '"',
@@ -441,6 +642,8 @@
         p.utmZone,
         p.utmEasting,
         p.utmNorthing,
+        p.alt != null ? p.alt : "",
+        p.accuracy != null ? p.accuracy : "",
         new Date(p.t).toLocaleString()
       ];
       csv += row.join(",") + "\n";
@@ -481,171 +684,21 @@
       '<name>Puntos Odómetro GPS</name>\n';
 
     savedPoints.forEach(function (p) {
+      let desc = p.utmZone + " " + p.utmEasting + "E " + p.utmNorthing + "N";
+      if (p.alt != null) desc += " · Alt " + p.alt + " m";
+      if (p.accuracy != null) desc += " · Precisión ±" + p.accuracy + " m";
+      desc += " — " + new Date(p.t).toLocaleString();
+      const altStr = p.alt != null ? p.alt : 0;
       kml +=
         '<Placemark>\n' +
         '<name>' + escapeXml(p.label) + '</name>\n' +
-        '<description>' + escapeXml(p.utmZone + " " + p.utmEasting + "E " + p.utmNorthing + "N — " + new Date(p.t).toLocaleString()) + '</description>\n' +
-        '<Point><coordinates>' + p.lon.toFixed(6) + ',' + p.lat.toFixed(6) + ',0</coordinates></Point>\n' +
+        '<description>' + escapeXml(desc) + '</description>\n' +
+        '<Point>' + (p.alt != null ? '<altitudeMode>absolute</altitudeMode>' : '') + '<coordinates>' + p.lon.toFixed(6) + ',' + p.lat.toFixed(6) + ',' + altStr + '</coordinates></Point>\n' +
         '</Placemark>\n';
     });
 
     kml += '</Document>\n</kml>';
     downloadBlob(kml, "application/vnd.google-earth.kml+xml;charset=utf-8;", "puntos_odometro.kml");
-  }
-
-  // ---------- Exportar Shapefile (SHP/SHX/DBF/PRJ) para ArcGIS ----------
-  // Genera los 4 archivos que componen un shapefile de puntos en WGS84.
-  // IMPORTANTE: los 4 archivos deben guardarse juntos en la misma carpeta
-  // con el mismo nombre base para que ArcGIS/QGIS puedan abrirlos.
-  function buildShpAndShx(points) {
-    const n = points.length;
-    const shpContentBytes = n * (8 + 20); // por punto: 8 bytes cabecera de registro + 20 bytes de contenido
-    const shpBuf = new ArrayBuffer(100 + shpContentBytes);
-    const shpView = new DataView(shpBuf);
-    const shxBuf = new ArrayBuffer(100 + n * 8);
-    const shxView = new DataView(shxBuf);
-
-    let xs = points.map(function (p) { return p.lon; });
-    let ys = points.map(function (p) { return p.lat; });
-    const xmin = Math.min.apply(null, xs), xmax = Math.max.apply(null, xs);
-    const ymin = Math.min.apply(null, ys), ymax = Math.max.apply(null, ys);
-
-    function writeHeader(view, fileLengthWords) {
-      view.setInt32(0, 9994, false);           // File Code
-      for (let i = 4; i <= 20; i += 4) view.setInt32(i, 0, false); // Unused
-      view.setInt32(24, fileLengthWords, false); // File Length (words)
-      view.setInt32(28, 1000, true);            // Version
-      view.setInt32(32, 1, true);               // Shape Type = Point
-      view.setFloat64(36, xmin, true);
-      view.setFloat64(44, ymin, true);
-      view.setFloat64(52, xmax, true);
-      view.setFloat64(60, ymax, true);
-      view.setFloat64(68, 0, true);              // Zmin
-      view.setFloat64(76, 0, true);              // Zmax
-      view.setFloat64(84, 0, true);              // Mmin
-      view.setFloat64(92, 0, true);              // Mmax
-    }
-
-    writeHeader(shpView, (100 + shpContentBytes) / 2);
-    writeHeader(shxView, (100 + n * 8) / 2);
-
-    let shpOffset = 100;
-    let shxOffset = 100;
-    let wordOffset = 50; // 100 bytes = 50 words, primer registro empieza justo tras la cabecera
-
-    for (let i = 0; i < n; i++) {
-      const p = points[i];
-      // --- registro en .shp ---
-      shpView.setInt32(shpOffset, i + 1, false);   // Record Number (1-based)
-      shpView.setInt32(shpOffset + 4, 10, false);  // Content Length en words (20 bytes = 10 words)
-      shpView.setInt32(shpOffset + 8, 1, true);    // Shape Type = Point
-      shpView.setFloat64(shpOffset + 12, p.lon, true); // X
-      shpView.setFloat64(shpOffset + 20, p.lat, true); // Y
-      shpOffset += 28;
-
-      // --- registro en .shx ---
-      shxView.setInt32(shxOffset, wordOffset, false);  // Offset (words)
-      shxView.setInt32(shxOffset + 4, 10, false);       // Content Length (words)
-      shxOffset += 8;
-
-      wordOffset += 14; // 4 words de cabecera de registro + 10 words de contenido
-    }
-
-    return { shp: shpBuf, shx: shxBuf };
-  }
-
-  function buildDbf(points) {
-    // Campos: ID (Numérico), LABEL (Texto), LAT/LON (Numérico), ZONA_UTM (Texto), EASTING/NORTHING (Numérico), FECHA (Texto)
-    const fields = [
-      { name: "ID", type: "N", len: 10, dec: 0 },
-      { name: "LABEL", type: "C", len: 50, dec: 0 },
-      { name: "LAT", type: "N", len: 15, dec: 6 },
-      { name: "LON", type: "N", len: 15, dec: 6 },
-      { name: "ZONA_UTM", type: "C", len: 6, dec: 0 },
-      { name: "EASTING", type: "N", len: 10, dec: 0 },
-      { name: "NORTHING", type: "N", len: 12, dec: 0 },
-      { name: "FECHA", type: "C", len: 20, dec: 0 }
-    ];
-    const recordLength = 1 + fields.reduce(function (s, f) { return s + f.len; }, 0); // +1 flag de borrado
-    const headerLength = 32 + fields.length * 32 + 1;
-    const n = points.length;
-
-    const buf = new ArrayBuffer(headerLength + n * recordLength + 1); // +1 marca de fin de archivo
-    const view = new DataView(buf);
-    const bytes = new Uint8Array(buf);
-
-    const now = new Date();
-    view.setUint8(0, 0x03); // dBase III sin memo
-    view.setUint8(1, now.getFullYear() - 1900);
-    view.setUint8(2, now.getMonth() + 1);
-    view.setUint8(3, now.getDate());
-    view.setInt32(4, n, true);              // número de registros
-    view.setInt16(8, headerLength, true);
-    view.setInt16(10, recordLength, true);
-
-    let pos = 32;
-    fields.forEach(function (f) {
-      for (let i = 0; i < 11; i++) bytes[pos + i] = i < f.name.length ? f.name.charCodeAt(i) : 0;
-      view.setUint8(pos + 11, f.type.charCodeAt(0));
-      view.setUint8(pos + 16, f.len);
-      view.setUint8(pos + 17, f.dec);
-      pos += 32;
-    });
-    bytes[pos] = 0x0d; // terminador de cabecera
-    pos += 1;
-
-    function writeField(str, len) {
-      const s = String(str).slice(0, len);
-      for (let i = 0; i < len; i++) bytes[pos + i] = i < s.length ? s.charCodeAt(i) : 0x20; // relleno con espacios
-      pos += len;
-    }
-    function writeNumField(num, len, dec) {
-      const s = (typeof num === "number" ? num.toFixed(dec) : String(num)).slice(0, len);
-      const padded = " ".repeat(Math.max(0, len - s.length)) + s; // los numéricos van alineados a la derecha
-      for (let i = 0; i < len; i++) bytes[pos + i] = padded.charCodeAt(i);
-      pos += len;
-    }
-
-    points.forEach(function (p, i) {
-      bytes[pos] = 0x20; // no borrado
-      pos += 1;
-      writeNumField(i + 1, 10, 0);
-      writeField(p.label, 50);
-      writeNumField(p.lat, 15, 6);
-      writeNumField(p.lon, 15, 6);
-      writeField(p.utmZone, 6);
-      writeNumField(p.utmEasting, 10, 0);
-      writeNumField(p.utmNorthing, 12, 0);
-      writeField(new Date(p.t).toLocaleString(), 20);
-    });
-
-    bytes[pos] = 0x1a; // fin de archivo
-    return buf;
-  }
-
-  function buildPrjWkt() {
-    return 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],' +
-           'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
-  }
-
-  function exportPointsSHP() {
-    if (savedPoints.length === 0) {
-      alert("No hay puntos guardados para exportar.");
-      return;
-    }
-    const { shp, shx } = buildShpAndShx(savedPoints);
-    const dbf = buildDbf(savedPoints);
-    const prj = buildPrjWkt();
-
-    // Se descargan 4 archivos por separado. Guárdalos todos juntos, en la
-    // misma carpeta y con el mismo nombre base, para que ArcGIS/QGIS
-    // los reconozca como un único shapefile.
-    downloadBlob(shp, "application/octet-stream", "puntos_odometro.shp");
-    downloadBlob(shx, "application/octet-stream", "puntos_odometro.shx");
-    downloadBlob(dbf, "application/octet-stream", "puntos_odometro.dbf");
-    downloadBlob(prj, "text/plain;charset=utf-8;", "puntos_odometro.prj");
-
-    alert("Se han descargado 4 archivos (.shp .shx .dbf .prj). Guárdalos todos en la misma carpeta con el mismo nombre para abrirlos en ArcGIS.");
   }
 
   function copyCoords() {
@@ -732,7 +785,9 @@
     try {
       const data = {
         totalDistanceM: totalDistanceM,
+        distanceActive: distanceActive,
         totalDistanceM2: totalDistanceM2,
+        distanceActive2: distanceActive2,
         pedoSteps: pedoSteps,
         pedoDistanceM: pedoDistanceM,
         strideLength: parseFloat(document.getElementById("strideLength").value) || 1,
@@ -761,9 +816,17 @@
 
       totalDistanceM = data.totalDistanceM || 0;
       el.totalDistance.textContent = formatMeters(totalDistanceM);
+      distanceActive = !!data.distanceActive;
+      el.dist1ToggleBtn.textContent = distanceActive ? "Detener" : "Activar";
+      el.dist1Badge.textContent = distanceActive ? "en directo" : "inactivo";
+      el.dist1Badge.classList.toggle("live", distanceActive);
 
       totalDistanceM2 = data.totalDistanceM2 || 0;
       el.totalDistance2.textContent = formatMeters(totalDistanceM2);
+      distanceActive2 = !!data.distanceActive2;
+      el.dist2ToggleBtn.textContent = distanceActive2 ? "Detener" : "Activar";
+      el.dist2Badge.textContent = distanceActive2 ? "en directo" : "inactivo";
+      el.dist2Badge.classList.toggle("live", distanceActive2);
 
       pedoSteps = data.pedoSteps || 0;
       pedoDistanceM = data.pedoDistanceM || 0;
@@ -797,17 +860,26 @@
   // Actualiza un contador de distancia con el método de "punto ancla":
   // solo suma cuando el movimiento supera el margen de error del GPS,
   // evitando que el ruido en parado se cuente como distancia recorrida.
-  function updateAnchoredDistance(anchor, total, lat, lon, accuracy) {
+  // Cuando hay dato de altitud fiable en ambos extremos del tramo, la
+  // distancia sumada es la distancia 3D (horizontal + desnivel), más exacta
+  // en carreteras con pendiente que la simple proyección horizontal.
+  function updateAnchoredDistance(anchor, total, lat, lon, alt, accuracy) {
     if (accuracy != null && accuracy > MIN_ACCURACY_FOR_DISTANCE) {
       return { anchor: anchor, total: total };
     }
+    const hasAlt = alt != null && !isNaN(alt);
     if (anchor == null) {
-      return { anchor: { lat: lat, lon: lon }, total: total };
+      return { anchor: { lat: lat, lon: lon, alt: hasAlt ? alt : null }, total: total };
     }
-    const dAnchor = haversineMeters(anchor.lat, anchor.lon, lat, lon);
+    const dHoriz = haversineMeters(anchor.lat, anchor.lon, lat, lon);
     const threshold = Math.max(accuracy || MIN_MOVEMENT_M, MIN_MOVEMENT_M);
-    if (dAnchor >= threshold && dAnchor < 500) {
-      return { anchor: { lat: lat, lon: lon }, total: total + Math.round(dAnchor) };
+    if (dHoriz >= threshold && dHoriz < 500) {
+      let dTravel = dHoriz;
+      if (hasAlt && anchor.alt != null) {
+        const dVert = alt - anchor.alt;
+        dTravel = Math.sqrt(dHoriz * dHoriz + dVert * dVert);
+      }
+      return { anchor: { lat: lat, lon: lon, alt: hasAlt ? alt : null }, total: total + Math.round(dTravel) };
     }
     return { anchor: anchor, total: total };
   }
@@ -883,10 +955,17 @@
     utmEasting: document.getElementById("utmEasting"),
     utmNorthing: document.getElementById("utmNorthing"),
     latLon: document.getElementById("latLon"),
+    altitudeValue: document.getElementById("altitudeValue"),
     totalDistance: document.getElementById("totalDistance"),
     resetTotalBtn: document.getElementById("resetTotalBtn"),
+    dist1ToggleBtn: document.getElementById("dist1ToggleBtn"),
+    dist1Badge: document.getElementById("dist1Badge"),
+    dist1PauseNote: document.getElementById("dist1PauseNote"),
     totalDistance2: document.getElementById("totalDistance2"),
     resetTotal2Btn: document.getElementById("resetTotal2Btn"),
+    dist2ToggleBtn: document.getElementById("dist2ToggleBtn"),
+    dist2Badge: document.getElementById("dist2Badge"),
+    dist2PauseNote: document.getElementById("dist2PauseNote"),
     pedoSteps: document.getElementById("pedoSteps"),
     pedoDistance: document.getElementById("pedoDistance"),
     pedoToggleBtn: document.getElementById("pedoToggleBtn"),
@@ -896,7 +975,13 @@
     compassNeedle: document.getElementById("compassNeedle"),
     compassText: document.getElementById("compassText"),
     tempInfo: document.getElementById("tempInfo"),
-    pointsList: document.getElementById("pointsList")
+    batteryInfo: document.getElementById("batteryInfo"),
+    batteryIcon: document.getElementById("batteryIcon"),
+    batteryFill: document.getElementById("batteryFill"),
+    batteryText: document.getElementById("batteryText"),
+    pointsList: document.getElementById("pointsList"),
+    mapModal: document.getElementById("mapModal"),
+    mapLayerToggleBtn: document.getElementById("mapLayerToggleBtn")
   };
 
   function setStatus(msg, type) {
@@ -906,7 +991,8 @@
 
   // ---------- Render de posición ----------
   function renderPosition(pos) {
-    const { latitude, longitude, speed, accuracy } = pos.coords;
+    const { latitude, longitude, speed, accuracy, altitude, altitudeAccuracy } = pos.coords;
+    const hasAltitude = altitude != null && !isNaN(altitude);
 
     // UTM
     const utm = latLonToUTM(latitude, longitude);
@@ -915,10 +1001,20 @@
     el.utmNorthing.textContent = Math.round(utm.northing) + " m";
     el.latLon.textContent = latitude.toFixed(6) + ", " + longitude.toFixed(6);
 
+    // Altitud (ubicada junto a las coordenadas UTM)
+    if (hasAltitude) {
+      let altText = Math.round(altitude) + " m";
+      if (altitudeAccuracy != null && !isNaN(altitudeAccuracy)) altText += " (±" + Math.round(altitudeAccuracy) + " m)";
+      el.altitudeValue.textContent = altText;
+    } else {
+      el.altitudeValue.textContent = "sin dato";
+    }
+
     // Precisión (ubicada junto a las coordenadas UTM)
+    const signalPoor = accuracy != null && accuracy > MIN_ACCURACY_FOR_DISTANCE;
     if (accuracy != null) {
       el.accuracyTag.textContent = "±" + Math.round(accuracy) + " m";
-      el.accuracyTag.className = "precision-value" + (accuracy > MIN_ACCURACY_FOR_DISTANCE ? " bad" : "");
+      el.accuracyTag.className = "precision-value" + (signalPoor ? " bad" : "");
     }
 
     // Velocidad: usa GPS si está disponible y es plausible, si no calcula por Haversine/tiempo
@@ -944,24 +1040,32 @@
     // lectura cruda. Solo se suma cuando el desplazamiento supera el margen
     // de error del GPS (su precisión reportada) — así el ruido/drift de los
     // satélites en parado no se cuenta como movimiento. Cuando sí hay
-    // movimiento real, se suma en metros enteros y el ancla se reubica.
-    // Distancia Viajada (contador 1)
-    const upd1 = updateAnchoredDistance(distanceAnchor, totalDistanceM, latitude, longitude, accuracy);
-    distanceAnchor = upd1.anchor;
-    totalDistanceM = upd1.total;
-    el.totalDistance.textContent = formatMeters(totalDistanceM);
+    // movimiento real, se suma la distancia 3D (horizontal + desnivel, si hay
+    // dato de altitud) en metros enteros y el ancla se reubica.
+    // Distancia Viajada (contador 1) — solo acumula mientras está activado
+    if (distanceActive) {
+      const upd1 = updateAnchoredDistance(distanceAnchor, totalDistanceM, latitude, longitude, altitude, accuracy);
+      distanceAnchor = upd1.anchor;
+      totalDistanceM = upd1.total;
+      el.totalDistance.textContent = formatMeters(totalDistanceM);
+      el.dist1PauseNote.style.display = signalPoor ? "block" : "none";
+    }
 
-    // Distancia Viajada 2 (contador 2, totalmente independiente)
-    const upd2 = updateAnchoredDistance(distanceAnchor2, totalDistanceM2, latitude, longitude, accuracy);
-    distanceAnchor2 = upd2.anchor;
-    totalDistanceM2 = upd2.total;
-    el.totalDistance2.textContent = formatMeters(totalDistanceM2);
+    // Distancia Viajada 2 (contador 2, totalmente independiente) — solo acumula mientras está activado
+    if (distanceActive2) {
+      const upd2 = updateAnchoredDistance(distanceAnchor2, totalDistanceM2, latitude, longitude, altitude, accuracy);
+      distanceAnchor2 = upd2.anchor;
+      totalDistanceM2 = upd2.total;
+      el.totalDistance2.textContent = formatMeters(totalDistanceM2);
+      el.dist2PauseNote.style.display = signalPoor ? "block" : "none";
+    }
 
-    lastPos = { lat: latitude, lon: longitude, t: now };
+    lastPos = { lat: latitude, lon: longitude, alt: hasAltitude ? altitude : null, accuracy: accuracy, t: now };
     setStatus("Señal GPS activa", "ok");
     scheduleSave();
 
     if (savedPoints.length > 0) renderPointsList();
+    if (map && el.mapModal.classList.contains("open")) refreshMapMarkers();
 
     // Temperatura: solo se consulta cada cierto tiempo para no abusar del servicio online
     if (now - lastTempFetchTime > TEMP_FETCH_INTERVAL_MS) {
@@ -996,15 +1100,45 @@
   // ---------- Botones ----------
   el.resetTotalBtn.addEventListener("click", function () {
     totalDistanceM = 0;
-    distanceAnchor = lastPos ? { lat: lastPos.lat, lon: lastPos.lon } : null;
+    distanceAnchor = lastPos ? { lat: lastPos.lat, lon: lastPos.lon, alt: lastPos.alt } : null;
     el.totalDistance.textContent = "0 m";
+    el.dist1PauseNote.style.display = "none";
     saveTrip();
   });
 
   el.resetTotal2Btn.addEventListener("click", function () {
     totalDistanceM2 = 0;
-    distanceAnchor2 = lastPos ? { lat: lastPos.lat, lon: lastPos.lon } : null;
+    distanceAnchor2 = lastPos ? { lat: lastPos.lat, lon: lastPos.lon, alt: lastPos.alt } : null;
     el.totalDistance2.textContent = "0 m";
+    el.dist2PauseNote.style.display = "none";
+    saveTrip();
+  });
+
+  // Cada contador de distancia se activa/detiene de forma totalmente
+  // independiente: pulsar el botón de uno no afecta en absoluto al otro.
+  el.dist1ToggleBtn.addEventListener("click", function () {
+    distanceActive = !distanceActive;
+    if (distanceActive) {
+      distanceAnchor = lastPos ? { lat: lastPos.lat, lon: lastPos.lon, alt: lastPos.alt } : null;
+    } else {
+      el.dist1PauseNote.style.display = "none";
+    }
+    el.dist1ToggleBtn.textContent = distanceActive ? "Detener" : "Activar";
+    el.dist1Badge.textContent = distanceActive ? "en directo" : "inactivo";
+    el.dist1Badge.classList.toggle("live", distanceActive);
+    saveTrip();
+  });
+
+  el.dist2ToggleBtn.addEventListener("click", function () {
+    distanceActive2 = !distanceActive2;
+    if (distanceActive2) {
+      distanceAnchor2 = lastPos ? { lat: lastPos.lat, lon: lastPos.lon, alt: lastPos.alt } : null;
+    } else {
+      el.dist2PauseNote.style.display = "none";
+    }
+    el.dist2ToggleBtn.textContent = distanceActive2 ? "Detener" : "Activar";
+    el.dist2Badge.textContent = distanceActive2 ? "en directo" : "inactivo";
+    el.dist2Badge.classList.toggle("live", distanceActive2);
     saveTrip();
   });
 
@@ -1039,8 +1173,13 @@
   document.getElementById("markPointBtn").addEventListener("click", markPoint);
   document.getElementById("exportPointsBtn").addEventListener("click", exportPointsCSV);
   document.getElementById("exportKmlBtn").addEventListener("click", exportPointsKML);
-  document.getElementById("exportShpBtn").addEventListener("click", exportPointsSHP);
   document.getElementById("copyCoordsBtn").addEventListener("click", copyCoords);
+  document.getElementById("gmapsCurrentBtn").addEventListener("click", openCurrentInGoogleMaps);
+  document.getElementById("openMapBtn").addEventListener("click", openMap);
+  document.getElementById("mapGmapsBtn").addEventListener("click", openCurrentInGoogleMaps);
+  el.mapCloseBtn = document.getElementById("mapCloseBtn");
+  el.mapCloseBtn.addEventListener("click", closeMap);
+  el.mapLayerToggleBtn.addEventListener("click", toggleMapLayer);
 
   // Delegación de eventos: un solo listener para todos los botones "✕" de la lista,
   // ya que los puntos se crean y destruyen dinámicamente.
@@ -1053,6 +1192,7 @@
   renderPointsList();
   loadTrip();
   startWatch();
+  initBattery();
   // Intento silencioso de arrancar la brújula (funciona directo en Android;
   // en iOS no hará nada hasta que el usuario toque el icono, por el permiso).
   // El texto "toca para activar" ya viene en el HTML por defecto.
