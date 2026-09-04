@@ -115,10 +115,6 @@
   .badge.live { background: rgba(0,230,118,0.15); color: var(--accent); }
   .badge.live-purple { background: rgba(179,136,255,0.15); color: #b388ff; }
 
-  #batteryIcon.batt-mid { color: #ffab40; }
-  #batteryIcon.batt-low { color: var(--warn); }
-  #batteryIcon.batt-charging { color: var(--accent); }
-
   /* ---------- Ventana de mapa a pantalla completa ---------- */
   .map-modal {
     display: none; position: fixed; inset: 0; background: var(--bg); z-index: 1000;
@@ -142,14 +138,6 @@
   <div class="info-bar">
     <span id="compassInfo">🧭 <span id="compassNeedle" style="display:inline-block; transition: transform 0.2s ease;">↑</span> <span id="compassText">toca para activar</span></span>
     <span id="tempInfo">🌡️ -- °C</span>
-    <span id="batteryInfo" style="display:none;">
-      <svg id="batteryIcon" width="20" height="11" viewBox="0 0 22 12" style="vertical-align:middle; color: var(--text-dim);">
-        <rect x="1" y="1" width="18" height="10" rx="2.5" ry="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
-        <rect x="19.5" y="4" width="1.5" height="4" rx="0.5" fill="currentColor"/>
-        <rect id="batteryFill" x="2.5" y="2.5" width="15" height="7" rx="1" fill="currentColor"/>
-      </svg>
-      <span id="batteryText">--%</span>
-    </span>
   </div>
   <button class="btn-secondary" id="wakeLockBtn" style="margin-bottom:12px;">🔆 Mantener pantalla encendida: OFF</button>
 
@@ -183,7 +171,9 @@
     <div class="utm-row"><span class="utm-label">Precisión</span><span class="precision-value" id="accuracyTag">--</span></div>
     <div class="btn-row" style="margin-top:10px;">
       <button class="btn-secondary" id="copyCoordsBtn">📋 Copiar coordenadas</button>
-      <button class="btn-primary" id="gmapsCurrentBtn" style="background:#00e676; color:#002d15;">🌐 Abrir en Google Maps</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn-primary" id="gmapsCurrentBtn" style="background:#00e676; color:#002d15;">🌍 Abrir en Google Maps</button>
     </div>
   </div>
 
@@ -406,46 +396,6 @@
       .catch(function () {
         el.tempInfo.textContent = "🌡️ sin conexión";
       });
-  }
-
-  // ---------- Batería del dispositivo ----------
-  // Usa la Battery Status API. No está soportada en Safari/iOS (Apple no la
-  // implementa por privacidad), por lo que en iPhone el indicador
-  // simplemente permanece oculto; en Android/Chrome sí se muestra y se
-  // actualiza en directo.
-  let batteryManager = null;
-  const BATTERY_FILL_MAX_WIDTH = 15; // ancho interior del icono SVG, en px
-
-  function updateBatteryUI() {
-    if (!batteryManager) return;
-    const level = batteryManager.level; // 0..1
-    const pct = Math.round(level * 100);
-    const charging = batteryManager.charging;
-
-    const fillWidth = Math.max(1, Math.round(BATTERY_FILL_MAX_WIDTH * level));
-    el.batteryFill.setAttribute("width", fillWidth);
-
-    el.batteryIcon.classList.remove("batt-mid", "batt-low", "batt-charging");
-    if (charging) {
-      el.batteryIcon.classList.add("batt-charging");
-    } else if (pct <= 20) {
-      el.batteryIcon.classList.add("batt-low");
-    } else if (pct <= 50) {
-      el.batteryIcon.classList.add("batt-mid");
-    }
-
-    el.batteryText.textContent = pct + "%" + (charging ? " ⚡" : "");
-  }
-
-  async function initBattery() {
-    if (!("getBattery" in navigator)) return; // no soportado (p. ej. iPhone/Safari)
-    try {
-      batteryManager = await navigator.getBattery();
-      el.batteryInfo.style.display = "";
-      updateBatteryUI();
-      batteryManager.addEventListener("levelchange", updateBatteryUI);
-      batteryManager.addEventListener("chargingchange", updateBatteryUI);
-    } catch (e) { /* API no disponible en este navegador */ }
   }
 
   // ---------- Puntos guardados ----------
@@ -1041,10 +991,6 @@
     compassNeedle: document.getElementById("compassNeedle"),
     compassText: document.getElementById("compassText"),
     tempInfo: document.getElementById("tempInfo"),
-    batteryInfo: document.getElementById("batteryInfo"),
-    batteryIcon: document.getElementById("batteryIcon"),
-    batteryFill: document.getElementById("batteryFill"),
-    batteryText: document.getElementById("batteryText"),
     pointsList: document.getElementById("pointsList"),
     pointSearchInput: document.getElementById("pointSearchInput"),
     areaResult: document.getElementById("areaResult"),
@@ -1246,7 +1192,6 @@
   renderPointsList();
   loadTrip();
   startWatch();
-  initBattery();
   // Intento silencioso de arrancar la brújula (funciona directo en Android;
   // en iOS no hará nada hasta que el usuario toque el icono, por el permiso).
   // El texto "toca para activar" ya viene en el HTML por defecto.
