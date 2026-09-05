@@ -877,26 +877,19 @@
   // Actualiza un contador de distancia con el método de "punto ancla":
   // solo suma cuando el movimiento supera el margen de error del GPS,
   // evitando que el ruido en parado se cuente como distancia recorrida.
-  // Cuando hay dato de altitud fiable en ambos extremos del tramo, la
-  // distancia sumada es la distancia 3D (horizontal + desnivel), más exacta
-  // en carreteras con pendiente que la simple proyección horizontal.
-  function updateAnchoredDistance(anchor, total, lat, lon, alt, accuracy) {
+  // Usa la distancia horizontal (Haversine) por tramos, igual que el
+  // cuentakilómetros de un vehículo — sin desnivel, para máxima fluidez.
+  function updateAnchoredDistance(anchor, total, lat, lon, accuracy) {
     if (accuracy != null && accuracy > MIN_ACCURACY_FOR_DISTANCE) {
       return { anchor: anchor, total: total };
     }
-    const hasAlt = alt != null && !isNaN(alt);
     if (anchor == null) {
-      return { anchor: { lat: lat, lon: lon, alt: hasAlt ? alt : null }, total: total };
+      return { anchor: { lat: lat, lon: lon }, total: total };
     }
     const dHoriz = haversineMeters(anchor.lat, anchor.lon, lat, lon);
     const threshold = Math.max(accuracy || MIN_MOVEMENT_M, MIN_MOVEMENT_M);
     if (dHoriz >= threshold && dHoriz < 500) {
-      let dTravel = dHoriz;
-      if (hasAlt && anchor.alt != null) {
-        const dVert = alt - anchor.alt;
-        dTravel = Math.sqrt(dHoriz * dHoriz + dVert * dVert);
-      }
-      return { anchor: { lat: lat, lon: lon, alt: hasAlt ? alt : null }, total: total + Math.round(dTravel) };
+      return { anchor: { lat: lat, lon: lon }, total: total + Math.round(dHoriz) };
     }
     return { anchor: anchor, total: total };
   }
@@ -1005,7 +998,7 @@
 
   // ---------- Render de posición ----------
   function renderPosition(pos) {
-    const { latitude, longitude, accuracy, altitude, altitudeAccuracy } = pos.coords;
+    const { latitude, longitude, accuracy, altitude } = pos.coords;
     const hasAltitude = altitude != null && !isNaN(altitude);
 
     // UTM
@@ -1017,9 +1010,7 @@
 
     // Altitud (ubicada junto a las coordenadas UTM)
     if (hasAltitude) {
-      let altText = Math.round(altitude) + " m";
-      if (altitudeAccuracy != null && !isNaN(altitudeAccuracy)) altText += " (±" + Math.round(altitudeAccuracy) + " m)";
-      el.altitudeValue.textContent = altText;
+      el.altitudeValue.textContent = Math.round(altitude) + " m";
     } else {
       el.altitudeValue.textContent = "sin dato";
     }
@@ -1037,11 +1028,11 @@
     // lectura cruda. Solo se suma cuando el desplazamiento supera el margen
     // de error del GPS (su precisión reportada) — así el ruido/drift de los
     // satélites en parado no se cuenta como movimiento. Cuando sí hay
-    // movimiento real, se suma la distancia 3D (horizontal + desnivel, si hay
-    // dato de altitud) en metros enteros y el ancla se reubica.
+    // movimiento real, se suma la distancia horizontal en metros enteros
+    // (igual que el cuentakilómetros de un vehículo) y el ancla se reubica.
     // Distancia Viajada (contador 1) — solo acumula mientras está activado
     if (distanceActive) {
-      const upd1 = updateAnchoredDistance(distanceAnchor, totalDistanceM, latitude, longitude, altitude, accuracy);
+      const upd1 = updateAnchoredDistance(distanceAnchor, totalDistanceM, latitude, longitude, accuracy);
       distanceAnchor = upd1.anchor;
       totalDistanceM = upd1.total;
       el.totalDistance.textContent = formatMeters(totalDistanceM);
@@ -1050,7 +1041,7 @@
 
     // Distancia Viajada 2 (contador 2, totalmente independiente) — solo acumula mientras está activado
     if (distanceActive2) {
-      const upd2 = updateAnchoredDistance(distanceAnchor2, totalDistanceM2, latitude, longitude, altitude, accuracy);
+      const upd2 = updateAnchoredDistance(distanceAnchor2, totalDistanceM2, latitude, longitude, accuracy);
       distanceAnchor2 = upd2.anchor;
       totalDistanceM2 = upd2.total;
       el.totalDistance2.textContent = formatMeters(totalDistanceM2);
